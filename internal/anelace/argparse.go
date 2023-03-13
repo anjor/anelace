@@ -3,9 +3,11 @@ package anelace
 import (
 	"encoding/base32"
 	"fmt"
+	"github.com/klauspost/cpuid/v2"
 	"io"
 	"log"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -87,6 +89,31 @@ var argParseErrOut = os.Stderr
 func NewFromArgv(argv []string) (anl *Anelace) {
 
 	anl = NewAnelace()
+
+	// init some constants
+	{
+		s := &anl.statSummary
+		s.EventType = "summary"
+
+		s.SysStats.ArgvInitial = make([]string, len(argv)-1)
+		copy(s.SysStats.ArgvInitial, argv[1:])
+
+		s.SysStats.PageSize = os.Getpagesize()
+		s.SysStats.Os = runtime.GOOS
+		s.SysStats.GoMaxProcs = runtime.GOMAXPROCS(-1)
+		s.SysStats.GoVersion = runtime.Version()
+		s.SysStats.CPU.NameStr = cpuid.CPU.BrandName
+		s.SysStats.CPU.Cores = cpuid.CPU.PhysicalCores
+		s.SysStats.CPU.ThreadsPerCore = cpuid.CPU.ThreadsPerCore
+		s.SysStats.CPU.FreqMHz = int(cpuid.CPU.Hz / 1000000)
+		s.SysStats.CPU.Vendor = cpuid.CPU.VendorString
+		s.SysStats.CPU.Family = cpuid.CPU.Family
+		s.SysStats.CPU.Model = cpuid.CPU.Model
+
+		feats := cpuid.CPU.FeatureSet()
+		sort.Strings(feats)
+		s.SysStats.CPU.FeaturesStr = strings.Join(feats, " ")
+	}
 
 	cfg := &anl.cfg
 	cfg.initArgvParser()
