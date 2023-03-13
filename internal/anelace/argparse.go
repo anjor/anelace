@@ -111,15 +111,12 @@ func NewFromArgv(argv []string) (anl *Anelace) {
 		argParseErrs = append(argParseErrs, "The value of --hash-bits must be a minimum of 128 and be divisible by 8")
 	}
 
-	if cfg.InlineMaxSize < 0 ||
-		(cfg.InlineMaxSize > 0 && cfg.InlineMaxSize < 4) ||
-		cfg.InlineMaxSize > constants.MaxLeafPayloadSize {
-		// https://github.com/multiformats/cid/issues/21
-		argParseErrs = append(argParseErrs, fmt.Sprintf(
-			"--inline-max-size '%s' out of bounds 0 or [4:%d]",
-			text.Commify(cfg.InlineMaxSize),
-			constants.MaxLeafPayloadSize,
-		))
+	if !inlineMaxSizeWithinBounds(cfg.InlineMaxSize) {
+		argParseErrs = append(argParseErrs,
+			fmt.Sprintf("--inline-max-size '%s' out of bounds 0 or [4:%d]",
+				text.Commify(cfg.InlineMaxSize),
+				constants.MaxLeafPayloadSize,
+			))
 	}
 
 	// Parses/creates the blockmaker/nodeencoder, to pass in turn to the collector chain
@@ -648,4 +645,8 @@ func (anl *Anelace) setupCollector(nodeEnc anlencoder.NodeEncoder) (argErrs []st
 
 	anl.collector = collectorInstance
 	return
+}
+
+func inlineMaxSizeWithinBounds(ims int) bool {
+	return ims == 0 || (ims >= 4 && ims < constants.MaxLeafPayloadSize)
 }
