@@ -1,7 +1,12 @@
 package anelace
 
 import (
+	"github.com/klauspost/cpuid/v2"
 	"io"
+	"os"
+	"runtime"
+	"sort"
+	"strings"
 	"sync"
 
 	anlblock "github.com/anjor/anelace/internal/anelace/block"
@@ -110,6 +115,28 @@ func NewAnelace() (anl *Anelace) {
 			InlineMaxSize:        36,
 			hashFunc:             "sha2-256", //sha256 hash
 		},
+	}
+
+	// init some constants
+	{
+		s := &anl.statSummary
+		s.EventType = "summary"
+
+		s.SysStats.PageSize = os.Getpagesize()
+		s.SysStats.Os = runtime.GOOS
+		s.SysStats.GoMaxProcs = runtime.GOMAXPROCS(-1)
+		s.SysStats.GoVersion = runtime.Version()
+		s.SysStats.CPU.NameStr = cpuid.CPU.BrandName
+		s.SysStats.CPU.Cores = cpuid.CPU.PhysicalCores
+		s.SysStats.CPU.ThreadsPerCore = cpuid.CPU.ThreadsPerCore
+		s.SysStats.CPU.FreqMHz = int(cpuid.CPU.Hz / 1000000)
+		s.SysStats.CPU.Vendor = cpuid.CPU.VendorString
+		s.SysStats.CPU.Family = cpuid.CPU.Family
+		s.SysStats.CPU.Model = cpuid.CPU.Model
+
+		feats := cpuid.CPU.FeatureSet()
+		sort.Strings(feats)
+		s.SysStats.CPU.FeaturesStr = strings.Join(feats, " ")
 	}
 
 	return
