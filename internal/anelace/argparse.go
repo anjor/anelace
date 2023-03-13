@@ -98,7 +98,7 @@ func NewFromArgv(argv []string) (anl *Anelace) {
 		cfg: config{
 			CidMultibase: "base32",
 			HashBits:     256,
-			AsyncHashers: runtime.NumCPU() * 2, // SANCHECK yes, this is high: seems the simd version knows what to do...
+			AsyncHashers: 0, // disabling async hashers for now
 
 			StatsActive: statsBlocks,
 
@@ -120,6 +120,13 @@ func NewFromArgv(argv []string) (anl *Anelace) {
 				emRootsJsonl:  nil,
 				emCarV1Stream: nil,
 			},
+
+			// some opinionated defaults
+			requestedNodeEncoder: "unixfsv1_merkledag-compat-protobuf",
+			requestedChunker:     "fixed-size_1048576",                                     // 1 MiB static chunking
+			requestedCollector:   "trickle_max-direct-leaves=4096_max-sibling-subgroups=8", // trickledag with 4096 MaxDirectLeaves + 8 MaxSiblingSubgroups
+			InlineMaxSize:        36,
+			hashFunc:             "sha2-256", //sha256 hash
 		},
 	}
 
@@ -179,11 +186,7 @@ func NewFromArgv(argv []string) (anl *Anelace) {
 		argParseErrs = append(argParseErrs, "The value of --hash-bits must be a minimum of 128 and be divisible by 8")
 	}
 
-	if !cfg.optSet.IsSet("inline-max-size") &&
-		!cfg.optSet.IsSet("ipfs-add-compatible-command") &&
-		cfg.requestedCollector != "none" {
-		argParseErrs = append(argParseErrs, "You must specify a valid value for --inline-max-size")
-	} else if cfg.InlineMaxSize < 0 ||
+	if cfg.InlineMaxSize < 0 ||
 		(cfg.InlineMaxSize > 0 && cfg.InlineMaxSize < 4) ||
 		cfg.InlineMaxSize > constants.MaxLeafPayloadSize {
 		// https://github.com/multiformats/cid/issues/21
