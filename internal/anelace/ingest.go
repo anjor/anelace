@@ -21,11 +21,14 @@ import (
 
 // SANCHECK: not sure if any of these make sense, nor have I measured the cost
 const (
-	carQueueSize = 2048
+	carQueueSize           = 2048
+	chunkQueueSizeTop      = 256
+	chunkQueueSizeSubchunk = 32
 )
 
 const (
 	ErrorString = IngestionEventType(iota)
+	NewChunkJsonl
 	NewRootJsonl
 )
 
