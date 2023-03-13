@@ -6,11 +6,9 @@ import (
 	"io"
 	"log"
 	"os"
-	"runtime"
 	"sort"
 	"strings"
 
-	"github.com/klauspost/cpuid/v2"
 	"github.com/multiformats/go-base36"
 
 	anlblock "github.com/anjor/anelace/internal/anelace/block"
@@ -88,68 +86,7 @@ var argParseErrOut = os.Stderr
 
 func NewFromArgv(argv []string) (anl *Anelace) {
 
-	anl = &Anelace{
-		// Some minimal non-controversial defaults, all overridable
-		// Try really hard to *NOT* have defaults that influence resulting CIDs
-		cfg: config{
-			CidMultibase: "base36",
-			HashBits:     256,
-			AsyncHashers: 0, // disabling async hashers for now
-
-			StatsActive: statsBlocks,
-
-			// RingBufferSize: 2*constants.HardMaxPayloadSize + 256*1024, // bare-minimum with defaults
-			RingBufferSize: 24 * 1024 * 1024, // SANCHECK low seems good somehow... fits in L3 maybe?
-
-			//SANCHECK: these numbers have not been validated
-			RingBufferMinRead:  256 * 1024,
-			RingBufferSectSize: 64 * 1024,
-
-			emittersStdOut: []string{emRootsJsonl},
-			emittersStdErr: []string{emStatsText},
-
-			// not defaults but rather the list of known/configured emitters
-			emitters: emissionTargets{
-				emNone:        nil,
-				emStatsText:   nil,
-				emStatsJsonl:  nil,
-				emRootsJsonl:  nil,
-				emCarV1Stream: nil,
-			},
-
-			// some opinionated defaults
-			requestedNodeEncoder: "unixfsv1",
-			requestedChunker:     "fixed-size_1048576",                                     // 1 MiB static chunking
-			requestedCollector:   "trickle_max-direct-leaves=2048_max-sibling-subgroups=8", // trickledag with 4096 MaxDirectLeaves + 8 MaxSiblingSubgroups
-			InlineMaxSize:        36,
-			hashFunc:             "sha2-256", //sha256 hash
-		},
-	}
-
-	// init some constants
-	{
-		s := &anl.statSummary
-		s.EventType = "summary"
-
-		s.SysStats.ArgvInitial = make([]string, len(argv)-1)
-		copy(s.SysStats.ArgvInitial, argv[1:])
-
-		s.SysStats.PageSize = os.Getpagesize()
-		s.SysStats.Os = runtime.GOOS
-		s.SysStats.GoMaxProcs = runtime.GOMAXPROCS(-1)
-		s.SysStats.GoVersion = runtime.Version()
-		s.SysStats.CPU.NameStr = cpuid.CPU.BrandName
-		s.SysStats.CPU.Cores = cpuid.CPU.PhysicalCores
-		s.SysStats.CPU.ThreadsPerCore = cpuid.CPU.ThreadsPerCore
-		s.SysStats.CPU.FreqMHz = int(cpuid.CPU.Hz / 1000000)
-		s.SysStats.CPU.Vendor = cpuid.CPU.VendorString
-		s.SysStats.CPU.Family = cpuid.CPU.Family
-		s.SysStats.CPU.Model = cpuid.CPU.Model
-
-		feats := cpuid.CPU.FeatureSet()
-		sort.Strings(feats)
-		s.SysStats.CPU.FeaturesStr = strings.Join(feats, " ")
-	}
+	anl = NewAnelace()
 
 	cfg := &anl.cfg
 	cfg.initArgvParser()
@@ -160,14 +97,6 @@ func NewFromArgv(argv []string) (anl *Anelace) {
 	if cfg.Help || cfg.HelpAll {
 		cfg.printUsage()
 		os.Exit(0)
-	}
-
-	// "invisible" set of defaults (not printed during --help)
-	if cfg.requestedCollector == "" && !cfg.optSet.IsSet("collector") {
-		cfg.requestedCollector = "none"
-		if cfg.requestedNodeEncoder == "" && !cfg.optSet.IsSet("node-encoder") {
-			cfg.requestedNodeEncoder = "unixfsv1"
-		}
 	}
 
 	// has a default
@@ -450,7 +379,7 @@ func (anl *Anelace) setupEmitters() (argErrs []string) {
 	}
 
 	// set shortcuts based on emitter config
-	anl.generateRoots = (anl.cfg.emitters[emRootsJsonl] != nil || anl.cfg.emitters[emStatsJsonl] != nil)
+	anl.generateRoots = anl.cfg.emitters[emRootsJsonl] != nil || anl.cfg.emitters[emStatsJsonl] != nil
 
 	return
 }
