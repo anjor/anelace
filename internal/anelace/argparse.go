@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"os"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/klauspost/cpuid/v2"
@@ -68,8 +66,6 @@ type config struct {
 	requestedChunker     string // Chunker: option/helptext in initArgvParser()
 	requestedCollector   string // Collector: option/helptext in initArgvParser()
 	requestedNodeEncoder string // The global (for now) node=>block encoder: option/helptext in initArgvParser
-
-	IpfsCompatCmd string `getopt:"--ipfs-add-compatible-command=cmdstring A complete go-ipfs/js-ipfs add command serving as a basis config (any conflicting option will take precedence)"`
 }
 
 const (
@@ -96,7 +92,7 @@ func NewFromArgv(argv []string) (anl *Anelace) {
 		// Some minimal non-controversial defaults, all overridable
 		// Try really hard to *NOT* have defaults that influence resulting CIDs
 		cfg: config{
-			CidMultibase: "base32",
+			CidMultibase: "base36",
 			HashBits:     256,
 			AsyncHashers: 0, // disabling async hashers for now
 
@@ -122,9 +118,9 @@ func NewFromArgv(argv []string) (anl *Anelace) {
 			},
 
 			// some opinionated defaults
-			requestedNodeEncoder: "unixfsv1_merkledag-compat-protobuf",
+			requestedNodeEncoder: "unixfsv1",
 			requestedChunker:     "fixed-size_1048576",                                     // 1 MiB static chunking
-			requestedCollector:   "trickle_max-direct-leaves=4096_max-sibling-subgroups=8", // trickledag with 4096 MaxDirectLeaves + 8 MaxSiblingSubgroups
+			requestedCollector:   "trickle_max-direct-leaves=2048_max-sibling-subgroups=8", // trickledag with 4096 MaxDirectLeaves + 8 MaxSiblingSubgroups
 			InlineMaxSize:        36,
 			hashFunc:             "sha2-256", //sha256 hash
 		},
@@ -164,13 +160,6 @@ func NewFromArgv(argv []string) (anl *Anelace) {
 	if cfg.Help || cfg.HelpAll {
 		cfg.printUsage()
 		os.Exit(0)
-	}
-
-	// pre-populate from a compat `ipfs add` command if one was supplied
-	if cfg.optSet.IsSet("ipfs-add-compatible-command") {
-		if errStrings := cfg.presetFromIPFS(); len(errStrings) > 0 {
-			argParseErrs = append(argParseErrs, errStrings...)
-		}
 	}
 
 	// "invisible" set of defaults (not printed during --help)
@@ -242,7 +231,7 @@ func NewFromArgv(argv []string) (anl *Anelace) {
 	// first do the generic options
 	cfg.optSet.VisitAll(func(o getopt.Option) {
 		switch o.LongName() {
-		case "help", "help-all", "ipfs-add-compatible-command":
+		case "help", "help-all":
 			// do nothing for these
 		default:
 			// skip these keys too, they come next
@@ -723,169 +712,4 @@ func (anl *Anelace) setupCollector(nodeEnc anlencoder.NodeEncoder) (argErrs []st
 
 	anl.collector = collectorInstance
 	return
-}
-
-type compatIpfsArgs struct {
-	CidVersion       int    `getopt:"--cid-version"`
-	InlineActive     bool   `getopt:"--inline"`
-	InlineLimit      int    `getopt:"--inline-limit"`
-	UseRawLeaves     bool   `getopt:"--raw-leaves"`
-	UpgradeV0CID     bool   `getopt:"--upgrade-cidv0-in-output"`
-	TrickleCollector bool   `getopt:"--trickle"`
-	Chunker          string `getopt:"--chunker"`
-	Hasher           string `getopt:"--hash"`
-}
-
-func (cfg *config) presetFromIPFS() (parseErrors []string) {
-
-	lVals, optSet := options.RegisterNew("", &compatIpfsArgs{
-		Chunker:    "size",
-		CidVersion: 0,
-	})
-	ipfsOpts := lVals.(*compatIpfsArgs)
-
-	args := append([]string{"ipfs-compat"}, strings.Split(cfg.IpfsCompatCmd, " ")...)
-	for {
-		if err := optSet.Getopt(args, nil); err != nil {
-			parseErrors = append(parseErrors, err.Error())
-		}
-		args = optSet.Args()
-		if len(args) == 0 {
-			break
-		} else if args[0] != "" && args[0] != "add" { // next iteration will eat the chaff as a "progname"
-			parseErrors = append(parseErrors, fmt.Sprintf(
-				"unexpected ipfs-compatible parameter(s): %s...",
-				args[0],
-			))
-		}
-	}
-
-	// bail early if errors present already
-	if len(parseErrors) > 0 {
-		return parseErrors
-	}
-
-	if !cfg.optSet.IsSet("hash") {
-		if !optSet.IsSet("hash") {
-			cfg.hashFunc = "sha2-256"
-		} else {
-			cfg.hashFunc = ipfsOpts.Hasher
-		}
-	}
-
-	if !cfg.optSet.IsSet("inline-max-size") {
-		if ipfsOpts.InlineActive {
-			if optSet.IsSet("inline-limit") {
-				cfg.InlineMaxSize = ipfsOpts.InlineLimit
-			} else {
-				cfg.InlineMaxSize = 32
-			}
-		} else {
-			cfg.InlineMaxSize = 0
-		}
-	}
-
-	// ignore everything compat if a collector is already given
-	if !cfg.optSet.IsSet("collector") {
-		// either trickle or fixed-outdegree, go-ipfs doesn't understand much else
-		if ipfsOpts.TrickleCollector {
-			cfg.requestedCollector = "trickle_max-direct-leaves=174_max-sibling-subgroups=4_unixfs-nul-leaf-compat"
-		} else {
-			cfg.requestedCollector = "fixed-outdegree_max-outdegree=174"
-		}
-	}
-
-	// ignore everything compat if an encoder is already given
-	if !cfg.optSet.IsSet("node-encoder") {
-
-		ufsv1EncoderOpts := []string{"unixfsv1", "merkledag-compat-protobuf"}
-
-		if ipfsOpts.CidVersion != 1 {
-			if ipfsOpts.UpgradeV0CID && ipfsOpts.CidVersion == 0 {
-				ufsv1EncoderOpts = append(ufsv1EncoderOpts, "cidv0")
-			} else {
-				parseErrors = append(
-					parseErrors,
-					fmt.Sprintf("--cid-version=%d is unsupported ( try --cid-version=1 or --upgrade-cidv0-in-output )", ipfsOpts.CidVersion),
-				)
-			}
-		} else if !optSet.IsSet("raw-leaves") {
-			ipfsOpts.UseRawLeaves = true
-		}
-
-		if !ipfsOpts.UseRawLeaves {
-			if ipfsOpts.TrickleCollector {
-				ufsv1EncoderOpts = append(ufsv1EncoderOpts, "unixfs-leaf-decorator-type=0")
-			} else {
-				ufsv1EncoderOpts = append(ufsv1EncoderOpts, "unixfs-leaf-decorator-type=2")
-			}
-		}
-
-		cfg.requestedNodeEncoder = strings.Join(ufsv1EncoderOpts, "_")
-	}
-
-	// ignore everything compat if a chunker is already given
-	if !cfg.optSet.IsSet("chunker") {
-
-		if strings.HasPrefix(ipfsOpts.Chunker, "size") {
-			sizeopts := strings.Split(ipfsOpts.Chunker, "-")
-			if sizeopts[0] == "size" {
-				if len(sizeopts) == 1 {
-					cfg.requestedChunker = "fixed-size_262144"
-				} else if len(sizeopts) == 2 {
-					cfg.requestedChunker = "fixed-size_" + sizeopts[1]
-				}
-			}
-		} else if strings.HasPrefix(ipfsOpts.Chunker, "rabin") {
-			rabinopts := strings.Split(ipfsOpts.Chunker, "-")
-			if rabinopts[0] == "rabin" {
-
-				var bits, min, max string
-
-				if len(rabinopts) == 1 {
-					bits = "18"
-					min = "87381"  // (2**18)/3
-					max = "393216" // (2**18)+(2**18)/2
-
-				} else if len(rabinopts) == 2 {
-					if avg, err := strconv.ParseUint(rabinopts[1], 10, 64); err == nil {
-						bits = fmt.Sprintf("%d", int(math.Log2(float64(avg))))
-						min = fmt.Sprintf("%d", avg/3)
-						max = fmt.Sprintf("%d", avg+avg/2)
-					}
-
-				} else if len(rabinopts) == 4 {
-					if avg, err := strconv.ParseUint(rabinopts[2], 10, 64); err == nil {
-						bits = fmt.Sprintf("%d", int(math.Log2(float64(avg))))
-						min = rabinopts[1]
-						max = rabinopts[3]
-					}
-				}
-
-				if bits != "" {
-					cfg.requestedChunker = fmt.Sprintf("rabin_polynomial=17437180132763653_window-size=16_state-target=0_state-mask-bits=%s_min-size=%s_max-size=%s",
-						bits,
-						min,
-						max,
-					)
-				}
-			}
-		} else if strings.HasPrefix(ipfsOpts.Chunker, "buzhash") {
-			buzopts := strings.Split(ipfsOpts.Chunker, "-")
-			if buzopts[0] == "buzhash" {
-				if len(buzopts) == 1 {
-					cfg.requestedChunker = "buzhash_hash-table=GoIPFSv0_state-target=0_state-mask-bits=17_min-size=131072_max-size=524288"
-				}
-			}
-		}
-
-		if cfg.requestedChunker == "" {
-			parseErrors = append(
-				parseErrors,
-				fmt.Sprintf("Invalid ipfs-compatible spec --chunker=%s", ipfsOpts.Chunker),
-			)
-		}
-	}
-
-	return parseErrors
 }
