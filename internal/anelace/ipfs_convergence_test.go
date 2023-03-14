@@ -27,7 +27,7 @@ func TestGoIpfsConvergence(t *testing.T) {
 
 		// the base convergence args are always the same
 		args := []string{
-			"dolphin-dongs",
+			"dolphin-songs",
 			"--emit-stderr=stats-text",
 			"--emit-stdout=stats-jsonl,roots-jsonl",
 			"--cid-multibase=base32",
