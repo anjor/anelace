@@ -5,8 +5,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/anjor/anelace/internal/anelace"
-	"github.com/anjor/anelace/internal/util/stream"
+	"github.com/anjor/anelace/pkg/anelace"
+	"github.com/anjor/anelace/pkg/util/stream"
 )
 
 func main() {
