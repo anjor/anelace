@@ -1,7 +1,7 @@
 //go:build !windows
 // +build !windows
 
-package pkg
+package anelace
 
 import (
 	"runtime"

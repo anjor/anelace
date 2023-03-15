@@ -17,7 +17,7 @@ func main() {
 
 	// Parse CLI and initialize everything
 	// On error it will log.Fatal() on its own
-	anl := pkg.NewFromArgv(os.Args)
+	anl := anelace.NewFromArgv(os.Args)
 
 	if stream.IsTTY(os.Stdin) {
 		fmt.Fprint(

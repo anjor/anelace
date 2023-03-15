@@ -1,4 +1,4 @@
-package pkg
+package anelace
 
 import (
 	"encoding/base32"
