@@ -1,4 +1,4 @@
-package anelace
+package pkg
 
 import (
 	"github.com/anjor/anelace/internal/block"

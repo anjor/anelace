@@ -3,10 +3,9 @@ package main
 import (
 	"fmt"
 	"github.com/anjor/anelace/internal/util/stream"
+	"github.com/anjor/anelace/pkg"
 	"log"
 	"os"
-
-	"github.com/anjor/anelace/pkg/anelace"
 )
 
 func main() {
@@ -18,7 +17,7 @@ func main() {
 
 	// Parse CLI and initialize everything
 	// On error it will log.Fatal() on its own
-	anl := anelace.NewFromArgv(os.Args)
+	anl := pkg.NewFromArgv(os.Args)
 
 	if stream.IsTTY(os.Stdin) {
 		fmt.Fprint(

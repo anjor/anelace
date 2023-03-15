@@ -1,4 +1,4 @@
-package anelace
+package pkg
 
 import (
 	"encoding/csv"
