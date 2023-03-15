@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/anjor/anelace"
 	"github.com/anjor/anelace/internal/util/stream"
-	"github.com/anjor/anelace/pkg"
 	"log"
 	"os"
 )
