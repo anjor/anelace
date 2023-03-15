@@ -2,11 +2,10 @@ package main
 
 import (
 	"fmt"
+	"github.com/anjor/anelace/internal/util/stream"
+	"github.com/anjor/anelace/pkg"
 	"log"
 	"os"
-
-	"github.com/anjor/anelace/internal/anelace"
-	"github.com/anjor/anelace/internal/util/stream"
 )
 
 func main() {
