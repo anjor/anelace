@@ -3,14 +3,13 @@ package anelace
 import (
 	"encoding/csv"
 	"encoding/json"
+	"github.com/anjor/anelace/internal/constants"
 	"io"
 	"log"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
-
-	"github.com/anjor/anelace/pkg/constants"
 )
 
 // base command => expected cid => file

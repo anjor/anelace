@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/anjor/anelace/internal/constants"
 	"io"
 	"math"
 	"math/bits"
@@ -11,7 +12,6 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/anjor/anelace/pkg/constants"
 	"github.com/pborman/getopt/v2"
 )
 

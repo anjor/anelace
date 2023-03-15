@@ -4,7 +4,7 @@ import (
 	"github.com/anjor/anelace/internal/block"
 	"github.com/anjor/anelace/internal/encoder"
 	"github.com/anjor/anelace/internal/util/encoding"
-	"github.com/anjor/anelace/pkg/zcpstring"
+	"github.com/anjor/anelace/internal/util/zcpstring"
 )
 
 type config struct {

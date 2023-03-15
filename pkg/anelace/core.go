@@ -11,6 +11,7 @@ import (
 	"github.com/anjor/anelace/internal/collector/fixedoutdegree"
 	"github.com/anjor/anelace/internal/collector/noop"
 	"github.com/anjor/anelace/internal/collector/trickle"
+	"github.com/anjor/anelace/internal/constants"
 	"github.com/anjor/anelace/internal/encoder"
 	"github.com/anjor/anelace/internal/encoder/unixfsv1"
 	"github.com/klauspost/cpuid/v2"
@@ -21,7 +22,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/anjor/anelace/pkg/constants"
 	"github.com/ipfs/go-qringbuf"
 )
 

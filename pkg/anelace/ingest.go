@@ -5,17 +5,16 @@ import (
 	"fmt"
 	"github.com/anjor/anelace/internal/block"
 	"github.com/anjor/anelace/internal/chunker"
+	"github.com/anjor/anelace/internal/constants"
 	"github.com/anjor/anelace/internal/util/encoding"
+	"github.com/anjor/anelace/internal/util/text"
+	"github.com/anjor/anelace/internal/util/zcpstring"
 	"io"
 	"log"
 	"sync/atomic"
 	"time"
 
-	"github.com/anjor/anelace/pkg/constants"
-	"github.com/anjor/anelace/pkg/zcpstring"
 	"github.com/ipfs/go-qringbuf"
-
-	"github.com/anjor/anelace/pkg/util/text"
 )
 
 // SANCHECK: not sure if any of these make sense, nor have I measured the cost

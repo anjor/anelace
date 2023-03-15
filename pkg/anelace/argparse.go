@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"github.com/anjor/anelace/internal/block"
 	"github.com/anjor/anelace/internal/collector"
+	"github.com/anjor/anelace/internal/constants"
 	"github.com/anjor/anelace/internal/encoder"
 	"github.com/anjor/anelace/internal/util/argparser"
+	"github.com/anjor/anelace/internal/util/stream"
+	"github.com/anjor/anelace/internal/util/text"
 	"io"
 	"log"
 	"math"
@@ -17,9 +20,6 @@ import (
 
 	"github.com/multiformats/go-base36"
 
-	"github.com/anjor/anelace/pkg/constants"
-	"github.com/anjor/anelace/pkg/util/stream"
-	"github.com/anjor/anelace/pkg/util/text"
 	"github.com/pborman/getopt/v2"
 	"github.com/pborman/options"
 )

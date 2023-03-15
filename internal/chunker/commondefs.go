@@ -1,7 +1,7 @@
 package anlchunker
 
 import (
-	"github.com/anjor/anelace/pkg/constants"
+	"github.com/anjor/anelace/internal/constants"
 )
 
 type InstanceConstants struct {

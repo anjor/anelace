@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"github.com/anjor/anelace/internal/chunker"
 	"github.com/anjor/anelace/internal/util/argparser"
+	"github.com/anjor/anelace/internal/util/text"
 
-	"github.com/anjor/anelace/pkg/util/text"
 	"github.com/pborman/getopt/v2"
 	"github.com/pborman/options"
 )

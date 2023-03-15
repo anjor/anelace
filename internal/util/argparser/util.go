@@ -3,11 +3,11 @@ package argparser
 import (
 	"bytes"
 	"fmt"
+	"github.com/anjor/anelace/internal/constants"
 	"reflect"
 	"regexp"
 	"strconv"
 
-	"github.com/anjor/anelace/pkg/constants"
 	"github.com/pborman/getopt/v2"
 )
 

@@ -3,12 +3,10 @@ package fixedsize
 import (
 	"fmt"
 	"github.com/anjor/anelace/internal/chunker"
+	"github.com/anjor/anelace/internal/constants"
 	"github.com/anjor/anelace/internal/util/argparser"
+	"github.com/anjor/anelace/internal/util/text"
 	"strconv"
-
-	"github.com/anjor/anelace/pkg/constants"
-
-	"github.com/anjor/anelace/pkg/util/text"
 )
 
 func NewChunker(

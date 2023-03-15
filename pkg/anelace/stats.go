@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/anjor/anelace/internal/block"
+	"github.com/anjor/anelace/internal/util/text"
 	"log"
 	"strings"
 
 	"github.com/ipfs/go-qringbuf"
-
-	"github.com/anjor/anelace/pkg/util/text"
 )
 
 // The bit reduction is to make the pkg seen map smaller memory-wise

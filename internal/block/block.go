@@ -3,7 +3,10 @@ package anlblock
 import (
 	"fmt"
 	"github.com/anjor/anelace/internal/chunker"
+	"github.com/anjor/anelace/internal/constants"
 	"github.com/anjor/anelace/internal/util/encoding"
+	"github.com/anjor/anelace/internal/util/text"
+	"github.com/anjor/anelace/internal/util/zcpstring"
 	"hash"
 	"log"
 	"math"
@@ -15,10 +18,6 @@ import (
 	"github.com/twmb/murmur3"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/sha3"
-
-	"github.com/anjor/anelace/pkg/constants"
-	"github.com/anjor/anelace/pkg/util/text"
-	"github.com/anjor/anelace/pkg/zcpstring"
 )
 
 // multihash ids come from https://github.com/multiformats/multicodec/blob/master/table.csv

@@ -2,13 +2,13 @@ package zcpstring
 
 import (
 	"crypto/sha1"
+	"github.com/anjor/anelace/internal/constants"
 	"math/rand"
 	"runtime"
 	"testing"
 	"time"
 
 	"github.com/anjor/anelace/maint/src/testhelpers"
-	"github.com/anjor/anelace/pkg/constants"
 )
 
 func TestString(t *testing.T) {
