@@ -56,7 +56,7 @@ type seenBlocks map[[seenHashSize]byte]uniqueBlockStats
 type seenRoots map[[seenHashSize]byte]seenRoot
 
 type Anelace struct {
-	// speederization shortcut flags for pkg logic
+	// speederization shortcut flags for internal logic
 	generateRoots bool
 
 	curStreamOffset  int64

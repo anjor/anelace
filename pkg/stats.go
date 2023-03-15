@@ -11,7 +11,7 @@ import (
 	"github.com/ipfs/go-qringbuf"
 )
 
-// The bit reduction is to make the pkg seen map smaller memory-wise
+// The bit reduction is to make the internal seen map smaller memory-wise
 // That many bits are taken off the *end* of any non-identity CID
 // We could remove the shortening, but for now there's no reason to, and
 // as an extra benefit it makes the murmur3 case *way* easier to code
