@@ -1,6 +1,13 @@
 package anelace
 
-import "github.com/pborman/getopt/v2"
+import (
+	"github.com/klauspost/cpuid/v2"
+	"github.com/pborman/getopt/v2"
+	"os"
+	"runtime"
+	"sort"
+	"strings"
+)
 
 type config struct {
 	optSet *getopt.Set
@@ -45,4 +52,72 @@ type config struct {
 	requestedNodeEncoder string // The global (for now) node=>block encoder: option/helptext in initArgvParser
 
 	IpfsCompatCmd string `getopt:"--ipfs-add-compatible-command=cmdstring A complete go-ipfs/js-ipfs add command serving as a basis config (any conflicting option will take precedence)"`
+}
+
+func defaultConfig() config {
+	return config{
+		CidMultibase: "base36",
+		HashBits:     256,
+		AsyncHashers: 0, // disabling async hashers for now
+
+		StatsActive: statsBlocks,
+
+		// RingBufferSize: 2*constants.HardMaxPayloadSize + 256*1024, // bare-minimum with defaults
+		RingBufferSize: 24 * 1024 * 1024, // SANCHECK low seems good somehow... fits in L3 maybe?
+
+		//SANCHECK: these numbers have not been validated
+		RingBufferMinRead:  256 * 1024,
+		RingBufferSectSize: 64 * 1024,
+
+		emittersStdOut: []string{emRootsJsonl},
+		emittersStdErr: []string{emStatsText},
+
+		// not defaults but rather the list of known/configured emitters
+		emitters: emissionTargets{
+			emNone:        nil,
+			emStatsText:   nil,
+			emStatsJsonl:  nil,
+			emRootsJsonl:  nil,
+			emCarV1Stream: nil,
+		},
+
+		// some opinionated defaults
+		requestedNodeEncoder: "unixfsv1",
+		requestedChunker:     "fixed-size_1048576",                                     // 1 MiB static chunking
+		requestedCollector:   "trickle_max-direct-leaves=2048_max-sibling-subgroups=8", // trickledag with 4096 MaxDirectLeaves + 8 MaxSiblingSubgroups
+		InlineMaxSize:        36,
+		hashFunc:             "sha2-256", //sha256 hash
+	}
+}
+
+func setStatSummary() statSummary {
+	return statSummary{
+		EventType: "summary",
+		SysStats: sysStats{
+			PageSize:   os.Getpagesize(),
+			Os:         runtime.GOOS,
+			GoMaxProcs: runtime.GOMAXPROCS(-1),
+			GoVersion:  runtime.Version(),
+			CPU:        getCpu(),
+		},
+	}
+}
+
+func getCpu() cpu {
+	return cpu{
+		NameStr:        cpuid.CPU.BrandName,
+		Cores:          cpuid.CPU.PhysicalCores,
+		ThreadsPerCore: cpuid.CPU.ThreadsPerCore,
+		FreqMHz:        int(cpuid.CPU.Hz / 1000000),
+		Vendor:         cpuid.CPU.VendorString,
+		Family:         cpuid.CPU.Family,
+		Model:          cpuid.CPU.Model,
+		FeaturesStr:    getFeatureSet(),
+	}
+}
+
+func getFeatureSet() string {
+	feats := cpuid.CPU.FeatureSet()
+	sort.Strings(feats)
+	return strings.Join(feats, " ")
 }

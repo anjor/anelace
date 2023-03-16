@@ -38,6 +38,44 @@ func seenKey(b *anlblock.Header) (id *[seenHashSize]byte) {
 	return
 }
 
+type cpu struct {
+	NameStr        string `json:"name"`
+	FeaturesStr    string `json:"features"`
+	Cores          int    `json:"cores"`
+	ThreadsPerCore int    `json:"threadsPerCore"`
+	FreqMHz        int    `json:"mhz"`
+	Vendor         string `json:"vendor"`
+	Family         int    `json:"family"`
+	Model          int    `json:"model"`
+}
+
+type sysStats struct {
+	qringbuf.Stats
+	ElapsedNsecs int64 `json:"elapsedNanoseconds"`
+
+	// getrusage() section
+	CpuUserNsecs int64 `json:"cpuUserNanoseconds"`
+	CpuSysNsecs  int64 `json:"cpuSystemNanoseconds"`
+	MaxRssBytes  int64 `json:"maxMemoryUsed"`
+	MinFlt       int64 `json:"cacheMinorFaults"`
+	MajFlt       int64 `json:"cacheMajorFaults"`
+	BioRead      int64 `json:"blockIoReads,omitempty"`
+	BioWrite     int64 `json:"blockIoWrites,omitempty"`
+	Sigs         int64 `json:"signalsReceived,omitempty"`
+	CtxSwYield   int64 `json:"contextSwitchYields"`
+	CtxSwForced  int64 `json:"contextSwitchForced"`
+
+	// for context
+	PageSize   int    `json:"pageSize"`
+	CPU        cpu    `json:"cpu"`
+	GoMaxProcs int    `json:"goMaxProcs"`
+	Os         string `json:"os"`
+
+	ArgvExpanded []string `json:"argvExpanded"`
+	ArgvInitial  []string `json:"argvInitial"`
+	GoVersion    string   `json:"goVersion"`
+}
+
 type statSummary struct {
 	EventType string `json:"event"`
 	Dag       struct {
@@ -47,41 +85,7 @@ type statSummary struct {
 	} `json:"logicalDag"`
 	Streams  int64       `json:"subStreams"`
 	Roots    []rootStats `json:"roots,omitempty"`
-	SysStats struct {
-		qringbuf.Stats
-		ElapsedNsecs int64 `json:"elapsedNanoseconds"`
-
-		// getrusage() section
-		CpuUserNsecs int64 `json:"cpuUserNanoseconds"`
-		CpuSysNsecs  int64 `json:"cpuSystemNanoseconds"`
-		MaxRssBytes  int64 `json:"maxMemoryUsed"`
-		MinFlt       int64 `json:"cacheMinorFaults"`
-		MajFlt       int64 `json:"cacheMajorFaults"`
-		BioRead      int64 `json:"blockIoReads,omitempty"`
-		BioWrite     int64 `json:"blockIoWrites,omitempty"`
-		Sigs         int64 `json:"signalsReceived,omitempty"`
-		CtxSwYield   int64 `json:"contextSwitchYields"`
-		CtxSwForced  int64 `json:"contextSwitchForced"`
-
-		// for context
-		PageSize int `json:"pageSize"`
-		CPU      struct {
-			NameStr        string `json:"name"`
-			FeaturesStr    string `json:"features"`
-			Cores          int    `json:"cores"`
-			ThreadsPerCore int    `json:"threadsPerCore"`
-			FreqMHz        int    `json:"mhz"`
-			Vendor         string `json:"vendor"`
-			Family         int    `json:"family"`
-			Model          int    `json:"model"`
-		} `json:"cpu"`
-		GoMaxProcs int    `json:"goMaxProcs"`
-		Os         string `json:"os"`
-
-		ArgvExpanded []string `json:"argvExpanded"`
-		ArgvInitial  []string `json:"argvInitial"`
-		GoVersion    string   `json:"goVersion"`
-	} `json:"sys"`
+	SysStats sysStats    `json:"sys"`
 }
 type rootStats struct {
 	Cid         string `json:"cid"`
