@@ -7,7 +7,6 @@ import (
 	"github.com/anjor/anelace/internal/collector"
 	"github.com/anjor/anelace/internal/constants"
 	"github.com/anjor/anelace/internal/encoder"
-	"github.com/anjor/anelace/internal/util/argparser"
 	"github.com/anjor/anelace/internal/util/stream"
 	"github.com/anjor/anelace/internal/util/text"
 	"io"
@@ -23,51 +22,6 @@ import (
 	"github.com/pborman/getopt/v2"
 	"github.com/pborman/options"
 )
-
-type config struct {
-	optSet *getopt.Set
-
-	// where to output
-	emitters emissionTargets
-
-	//
-	// Bulk of CLI options definition starts here, the rest further down in initArgvParser()
-	//
-
-	Help            bool `getopt:"-h --help         Display basic help"`
-	HelpAll         bool `getopt:"--help-all        Display full help including options for every currently supported chunker/collector/encoder"`
-	MultipartStream bool `getopt:"--multipart       Expect multiple SInt64BE-size-prefixed streams on stdIN"`
-	SkipNulInputs   bool `getopt:"--skip-nul-inputs Instead of emitting an IPFS-compatible zero-length CID, skip zero-length streams outright"`
-
-	emittersStdErr []string // Emitter spec: option/helptext in initArgvParser()
-	emittersStdOut []string // Emitter spec: option/helptext in initArgvParser()
-
-	// no-option-attached, these are instantiation error accumulators
-	erroredChunkers     []string
-	erroredCollectors   []string
-	erroredNodeEncoders []string
-
-	// Recommendation in help based on largest identity CID that fits in 63 chars (dns limit)
-	// of multibase-id prefixed encoding: 1 + ceil( (4+36) * log(256) / log(36) )
-	// The base36 => 36bytes match is a coincidence: for base 32 the max value is 34 bytes
-	InlineMaxSize      int `getopt:"--inline-max-size=bytes         Use identity-CID to refer to blocks having on-wire size at or below the specified value (36 is recommended), 0 disables"`
-	AsyncHashers       int `getopt:"--async-hashers=integer         Number of concurrent short-lived goroutines performing hashing. Set to 0 (disable) for predictable benchmarking. Default:"`
-	RingBufferSize     int `getopt:"--ring-buffer-size=bytes        The size of the quantized ring buffer used for ingestion. Default:"`
-	RingBufferSectSize int `getopt:"--ring-buffer-sync-size=bytes   (EXPERT SETTING) The size of each buffer synchronization sector. Default:"` // option vaguely named 'sync' to not confuse users
-	RingBufferMinRead  int `getopt:"--ring-buffer-min-sysread=bytes (EXPERT SETTING) Perform next read(2) only when the specified amount of free space is available in the buffer. Default:"`
-
-	StatsActive uint `getopt:"--stats-active=uint   A bitfield representing activated stat aggregations: bit0:BlockSizing, bit1:RingbufferTiming. Default:"`
-
-	HashBits     int    `getopt:"--hash-bits=integer    Amount of bits taken from *start* of the hash output. Default:"`
-	CidMultibase string `getopt:"--cid-multibase=string Use this multibase when encoding CIDs for output. One of 'base32', 'base36'. Default:"`
-	hashFunc     string // hash function to use: option/helptext in initArgvParser()
-
-	requestedChunker     string // Chunker: option/helptext in initArgvParser()
-	requestedCollector   string // Collector: option/helptext in initArgvParser()
-	requestedNodeEncoder string // The global (for now) node=>block encoder: option/helptext in initArgvParser
-
-	IpfsCompatCmd string `getopt:"--ipfs-add-compatible-command=cmdstring A complete go-ipfs/js-ipfs add command serving as a basis config (any conflicting option will take precedence)"`
-}
 
 const (
 	statsBlocks = 1 << iota
@@ -86,130 +40,6 @@ const (
 
 // where the CLI initial error messages go
 var argParseErrOut = os.Stderr
-
-func NewFromArgv(argv []string) (anl *Anelace) {
-
-	anl = NewAnelace()
-
-	// populate args
-	{
-		s := &anl.statSummary
-		s.SysStats.ArgvInitial = make([]string, len(argv)-1)
-		copy(s.SysStats.ArgvInitial, argv[1:])
-	}
-
-	cfg := &anl.cfg
-	cfg.initArgvParser()
-
-	// accumulator for multiple errors, to present to the user all at once
-	argParseErrs := argparser.Parse(argv, cfg.optSet)
-
-	if cfg.Help || cfg.HelpAll {
-		cfg.printUsage()
-		os.Exit(0)
-	}
-
-	// pre-populate from a compat `ipfs add` command if one was supplied
-	if cfg.optSet.IsSet("ipfs-add-compatible-command") {
-		if errStrings := cfg.presetFromIPFS(); len(errStrings) > 0 {
-			argParseErrs = append(argParseErrs, errStrings...)
-		}
-	}
-
-	// "invisible" set of defaults (not printed during --help)
-	if cfg.requestedCollector == "" && !cfg.optSet.IsSet("collector") {
-		cfg.requestedCollector = "none"
-		if cfg.requestedNodeEncoder == "" && !cfg.optSet.IsSet("node-encoder") {
-			cfg.requestedNodeEncoder = "unixfsv1"
-		}
-	}
-
-	// has a default
-	if cfg.HashBits < 128 || (cfg.HashBits%8) != 0 {
-		argParseErrs = append(argParseErrs, "The value of --hash-bits must be a minimum of 128 and be divisible by 8")
-	}
-
-	if !inlineMaxSizeWithinBounds(cfg.InlineMaxSize) {
-		argParseErrs = append(argParseErrs,
-			fmt.Sprintf("--inline-max-size '%s' out of bounds 0 or [4:%d]",
-				text.Commify(cfg.InlineMaxSize),
-				constants.MaxLeafPayloadSize,
-			))
-	}
-
-	// Parses/creates the blockmaker/nodeencoder, to pass in turn to the collector chain
-	// Not stored in the anl object itself, to cut down on logic leaks
-	nodeEnc, errorMessages := anl.setupEncoding()
-	argParseErrs = append(argParseErrs, errorMessages...)
-	argParseErrs = append(argParseErrs, anl.setupChunker()...)
-	argParseErrs = append(argParseErrs, anl.setupCollector(nodeEnc)...)
-	argParseErrs = append(argParseErrs, anl.setupEmitters()...)
-
-	// Opts check out - set up the car emitter
-	if len(argParseErrs) == 0 && anl.cfg.emitters[emCarV1Stream] != nil {
-		argParseErrs = append(argParseErrs, anl.setupCarWriting()...)
-	}
-
-	if len(argParseErrs) != 0 {
-		fmt.Fprint(argParseErrOut, "\nFatal error parsing arguments:\n\n")
-		cfg.printUsage()
-
-		sort.Strings(argParseErrs)
-		fmt.Fprintf(
-			argParseErrOut,
-			"Fatal error parsing arguments:\n\t%s\n",
-			strings.Join(argParseErrs, "\n\t"),
-		)
-		os.Exit(2)
-	}
-
-	// Opts *still* check out - take a snapshot of what we ended up with
-
-	// All cid-determining opt come last in a predefined order
-	cidOpts := []string{
-		"inline-max-size",
-		"hash",
-		"hash-bits",
-		"chunker",
-		"collector",
-		"node-encoder",
-	}
-	cidOptsIdx := map[string]struct{}{}
-	for _, n := range cidOpts {
-		cidOptsIdx[n] = struct{}{}
-	}
-
-	// first do the generic options
-	cfg.optSet.VisitAll(func(o getopt.Option) {
-		switch o.LongName() {
-		case "help", "help-all", "ipfs-add-compatible-command":
-			// do nothing for these
-		default:
-			// skip these keys too, they come next
-			if _, exists := cidOptsIdx[o.LongName()]; !exists {
-				anl.statSummary.SysStats.ArgvExpanded = append(
-					anl.statSummary.SysStats.ArgvExpanded, fmt.Sprintf(`--%s=%s`,
-						o.LongName(),
-						o.Value().String(),
-					),
-				)
-			}
-		}
-	})
-	sort.Strings(anl.statSummary.SysStats.ArgvExpanded)
-
-	// now do the remaining cid-determining options
-	for _, n := range cidOpts {
-		anl.statSummary.SysStats.ArgvExpanded = append(
-			anl.statSummary.SysStats.ArgvExpanded, fmt.Sprintf(`--%s=%s`,
-				n,
-				cfg.optSet.GetValue(n),
-			),
-		)
-	}
-
-	return
-}
 
 func (cfg *config) printUsage() {
 	cfg.optSet.PrintUsage(argParseErrOut)

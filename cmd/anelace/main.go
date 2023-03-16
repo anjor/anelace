@@ -17,7 +17,7 @@ func main() {
 
 	// Parse CLI and initialize everything
 	// On error it will log.Fatal() on its own
-	anl := anelace.NewFromArgv(os.Args)
+	anl := anelace.NewAnelaceFromArgv(os.Args)
 
 	if stream.IsTTY(os.Stdin) {
 		fmt.Fprint(
@@ -26,7 +26,7 @@ func main() {
 		)
 	} else if !inStat.Mode().IsRegular() || inStat.Size() > 16*1024*1024 { // SANCHECK - arbitrary
 		// Try optimizations if:
-		// - not a reguar file (and not a TTY - exempted above)
+		// - not a regular file (and not a TTY - exempted above)
 		// - regular file larger than a certain size (SANCHECK: somewhat arbitrary)
 		// An optimization returns os.ErrInvalid when it can't be applied to the file type
 		for _, opt := range stream.ReadOptimizations {
