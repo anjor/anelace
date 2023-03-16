@@ -115,14 +115,6 @@ func NewAnelaceFromArgv(argv []string) (anl *Anelace) {
 		}
 	}
 
-	// "invisible" set of defaults (not printed during --help)
-	if cfg.requestedCollector == "" && !cfg.optSet.IsSet("collector") {
-		cfg.requestedCollector = "none"
-		if cfg.requestedNodeEncoder == "" && !cfg.optSet.IsSet("node-encoder") {
-			cfg.requestedNodeEncoder = "unixfsv1"
-		}
-	}
-
 	// has a default
 	if cfg.HashBits < 128 || (cfg.HashBits%8) != 0 {
 		argParseErrs = append(argParseErrs, "The value of --hash-bits must be a minimum of 128 and be divisible by 8")
