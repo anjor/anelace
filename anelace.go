@@ -276,7 +276,3 @@ func (anl *Anelace) Destroy() {
 	anl.qrb = nil
 	anl.mu.Unlock()
 }
-
-func (anl *Anelace) SetCarWriter(w io.Writer) {
-	anl.carDataWriter = w
-}
