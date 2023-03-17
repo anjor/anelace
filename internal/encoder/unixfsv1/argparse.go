@@ -9,7 +9,7 @@ import (
 	"github.com/pborman/options"
 )
 
-func NewEncoder(args []string, cfg *anlencoder.AnlConfig) (_ anlencoder.NodeEncoder, initErrs []string) {
+func NewEncoder(args []string, cfg *anlencoder.AnlConfig) (_ anlencoder.NodeEncoder, initErrs []error) {
 
 	e := &encoder{
 		AnlConfig: cfg,
@@ -17,7 +17,7 @@ func NewEncoder(args []string, cfg *anlencoder.AnlConfig) (_ anlencoder.NodeEnco
 
 	optSet := getopt.New()
 	if err := options.RegisterSet("", &e.config, optSet); err != nil {
-		initErrs = []string{fmt.Sprintf("option set registration failed: %s", err)}
+		initErrs = []error{fmt.Errorf("option set registration failed: %s", err)}
 		return
 	}
 
@@ -40,7 +40,7 @@ func NewEncoder(args []string, cfg *anlencoder.AnlConfig) (_ anlencoder.NodeEnco
 	if !optSet.IsSet("unixfs-leaf-decorator-type") {
 		e.UnixFsType = -1
 	} else if e.UnixFsType != 0 && e.UnixFsType != 2 {
-		initErrs = append(initErrs, "when provided value of 'unixfs-leaf-decorator-type' can be only 0 or 2")
+		initErrs = append(initErrs, fmt.Errorf("when provided value of 'unixfs-leaf-decorator-type' can be only 0 or 2"))
 	}
 
 	if e.LegacyCIDv0Links &&
@@ -48,7 +48,7 @@ func NewEncoder(args []string, cfg *anlencoder.AnlConfig) (_ anlencoder.NodeEnco
 			e.HasherBits != 256) {
 		initErrs = append(
 			initErrs,
-			"legacy CIDv0 linking requires --hash=sha2-256 and --hash-bits=256",
+			fmt.Errorf("legacy CIDv0 linking requires --hash=sha2-256 and --hash-bits=256"),
 		)
 	}
 

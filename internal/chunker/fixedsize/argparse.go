@@ -14,7 +14,7 @@ func NewChunker(
 ) (
 	_ anlchunker.Chunker,
 	_ anlchunker.InstanceConstants,
-	initErrs []string,
+	initErrs []error,
 ) {
 
 	// on nil-args the "error" is the help text to be incorporated into
@@ -31,7 +31,7 @@ func NewChunker(
 	c := fixedSizeChunker{}
 
 	if len(args) != 2 {
-		initErrs = append(initErrs, "chunker requires an integer argument, the size of each chunk in bytes")
+		initErrs = append(initErrs, fmt.Errorf("chunker requires an integer argument, the size of each chunk in bytes"))
 	} else {
 		sizearg, err := strconv.ParseUint(
 			args[1][2:], // stripping off '--'
@@ -39,14 +39,14 @@ func NewChunker(
 			25, // 25bits == 32 * 1024 * 1024 == 32MiB
 		)
 		if err != nil {
-			initErrs = append(initErrs, fmt.Sprintf("argument parse failed: %s", err))
+			initErrs = append(initErrs, fmt.Errorf("argument parse failed: %s", err))
 		} else {
 			c.size = int(sizearg)
 		}
 	}
 
 	if c.size > constants.MaxLeafPayloadSize {
-		initErrs = append(initErrs, fmt.Sprintf(
+		initErrs = append(initErrs, fmt.Errorf(
 			"provided chunk size '%s' exceeds specified maximum payload size '%s",
 			text.Commify(c.size),
 			text.Commify(constants.MaxLeafPayloadSize),

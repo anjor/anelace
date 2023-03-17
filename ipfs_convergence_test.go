@@ -77,7 +77,7 @@ func TestGoIpfsConvergence(t *testing.T) {
 
 				events := make(chan IngestionEvent, 128)
 
-				go NewFromArgv(args).ProcessReader( //nolint:errcheck
+				go NewAnelaceFromArgv(args).ProcessReader( //nolint:errcheck
 					dataIn,
 					events,
 				)

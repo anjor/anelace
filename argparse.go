@@ -7,7 +7,6 @@ import (
 	"github.com/anjor/anelace/internal/collector"
 	"github.com/anjor/anelace/internal/constants"
 	"github.com/anjor/anelace/internal/encoder"
-	"github.com/anjor/anelace/internal/util/argparser"
 	"github.com/anjor/anelace/internal/util/stream"
 	"github.com/anjor/anelace/internal/util/text"
 	"io"
@@ -23,51 +22,6 @@ import (
 	"github.com/pborman/getopt/v2"
 	"github.com/pborman/options"
 )
-
-type config struct {
-	optSet *getopt.Set
-
-	// where to output
-	emitters emissionTargets
-
-	//
-	// Bulk of CLI options definition starts here, the rest further down in initArgvParser()
-	//
-
-	Help            bool `getopt:"-h --help         Display basic help"`
-	HelpAll         bool `getopt:"--help-all        Display full help including options for every currently supported chunker/collector/encoder"`
-	MultipartStream bool `getopt:"--multipart       Expect multiple SInt64BE-size-prefixed streams on stdIN"`
-	SkipNulInputs   bool `getopt:"--skip-nul-inputs Instead of emitting an IPFS-compatible zero-length CID, skip zero-length streams outright"`
-
-	emittersStdErr []string // Emitter spec: option/helptext in initArgvParser()
-	emittersStdOut []string // Emitter spec: option/helptext in initArgvParser()
-
-	// no-option-attached, these are instantiation error accumulators
-	erroredChunkers     []string
-	erroredCollectors   []string
-	erroredNodeEncoders []string
-
-	// Recommendation in help based on largest identity CID that fits in 63 chars (dns limit)
-	// of multibase-id prefixed encoding: 1 + ceil( (4+36) * log(256) / log(36) )
-	// The base36 => 36bytes match is a coincidence: for base 32 the max value is 34 bytes
-	InlineMaxSize      int `getopt:"--inline-max-size=bytes         Use identity-CID to refer to blocks having on-wire size at or below the specified value (36 is recommended), 0 disables"`
-	AsyncHashers       int `getopt:"--async-hashers=integer         Number of concurrent short-lived goroutines performing hashing. Set to 0 (disable) for predictable benchmarking. Default:"`
-	RingBufferSize     int `getopt:"--ring-buffer-size=bytes        The size of the quantized ring buffer used for ingestion. Default:"`
-	RingBufferSectSize int `getopt:"--ring-buffer-sync-size=bytes   (EXPERT SETTING) The size of each buffer synchronization sector. Default:"` // option vaguely named 'sync' to not confuse users
-	RingBufferMinRead  int `getopt:"--ring-buffer-min-sysread=bytes (EXPERT SETTING) Perform next read(2) only when the specified amount of free space is available in the buffer. Default:"`
-
-	StatsActive uint `getopt:"--stats-active=uint   A bitfield representing activated stat aggregations: bit0:BlockSizing, bit1:RingbufferTiming. Default:"`
-
-	HashBits     int    `getopt:"--hash-bits=integer    Amount of bits taken from *start* of the hash output. Default:"`
-	CidMultibase string `getopt:"--cid-multibase=string Use this multibase when encoding CIDs for output. One of 'base32', 'base36'. Default:"`
-	hashFunc     string // hash function to use: option/helptext in initArgvParser()
-
-	requestedChunker     string // Chunker: option/helptext in initArgvParser()
-	requestedCollector   string // Collector: option/helptext in initArgvParser()
-	requestedNodeEncoder string // The global (for now) node=>block encoder: option/helptext in initArgvParser
-
-	IpfsCompatCmd string `getopt:"--ipfs-add-compatible-command=cmdstring A complete go-ipfs/js-ipfs add command serving as a basis config (any conflicting option will take precedence)"`
-}
 
 const (
 	statsBlocks = 1 << iota
@@ -86,130 +40,6 @@ const (
 
 // where the CLI initial error messages go
 var argParseErrOut = os.Stderr
-
-func NewFromArgv(argv []string) (anl *Anelace) {
-
-	anl = NewAnelace()
-
-	// populate args
-	{
-		s := &anl.statSummary
-		s.SysStats.ArgvInitial = make([]string, len(argv)-1)
-		copy(s.SysStats.ArgvInitial, argv[1:])
-	}
-
-	cfg := &anl.cfg
-	cfg.initArgvParser()
-
-	// accumulator for multiple errors, to present to the user all at once
-	argParseErrs := argparser.Parse(argv, cfg.optSet)
-
-	if cfg.Help || cfg.HelpAll {
-		cfg.printUsage()
-		os.Exit(0)
-	}
-
-	// pre-populate from a compat `ipfs add` command if one was supplied
-	if cfg.optSet.IsSet("ipfs-add-compatible-command") {
-		if errStrings := cfg.presetFromIPFS(); len(errStrings) > 0 {
-			argParseErrs = append(argParseErrs, errStrings...)
-		}
-	}
-
-	// "invisible" set of defaults (not printed during --help)
-	if cfg.requestedCollector == "" && !cfg.optSet.IsSet("collector") {
-		cfg.requestedCollector = "none"
-		if cfg.requestedNodeEncoder == "" && !cfg.optSet.IsSet("node-encoder") {
-			cfg.requestedNodeEncoder = "unixfsv1"
-		}
-	}
-
-	// has a default
-	if cfg.HashBits < 128 || (cfg.HashBits%8) != 0 {
-		argParseErrs = append(argParseErrs, "The value of --hash-bits must be a minimum of 128 and be divisible by 8")
-	}
-
-	if !inlineMaxSizeWithinBounds(cfg.InlineMaxSize) {
-		argParseErrs = append(argParseErrs,
-			fmt.Sprintf("--inline-max-size '%s' out of bounds 0 or [4:%d]",
-				text.Commify(cfg.InlineMaxSize),
-				constants.MaxLeafPayloadSize,
-			))
-	}
-
-	// Parses/creates the blockmaker/nodeencoder, to pass in turn to the collector chain
-	// Not stored in the anl object itself, to cut down on logic leaks
-	nodeEnc, errorMessages := anl.setupEncoding()
-	argParseErrs = append(argParseErrs, errorMessages...)
-	argParseErrs = append(argParseErrs, anl.setupChunker()...)
-	argParseErrs = append(argParseErrs, anl.setupCollector(nodeEnc)...)
-	argParseErrs = append(argParseErrs, anl.setupEmitters()...)
-
-	// Opts check out - set up the car emitter
-	if len(argParseErrs) == 0 && anl.cfg.emitters[emCarV1Stream] != nil {
-		argParseErrs = append(argParseErrs, anl.setupCarWriting()...)
-	}
-
-	if len(argParseErrs) != 0 {
-		fmt.Fprint(argParseErrOut, "\nFatal error parsing arguments:\n\n")
-		cfg.printUsage()
-
-		sort.Strings(argParseErrs)
-		fmt.Fprintf(
-			argParseErrOut,
-			"Fatal error parsing arguments:\n\t%s\n",
-			strings.Join(argParseErrs, "\n\t"),
-		)
-		os.Exit(2)
-	}
-
-	// Opts *still* check out - take a snapshot of what we ended up with
-
-	// All cid-determining opt come last in a predefined order
-	cidOpts := []string{
-		"inline-max-size",
-		"hash",
-		"hash-bits",
-		"chunker",
-		"collector",
-		"node-encoder",
-	}
-	cidOptsIdx := map[string]struct{}{}
-	for _, n := range cidOpts {
-		cidOptsIdx[n] = struct{}{}
-	}
-
-	// first do the generic options
-	cfg.optSet.VisitAll(func(o getopt.Option) {
-		switch o.LongName() {
-		case "help", "help-all", "ipfs-add-compatible-command":
-			// do nothing for these
-		default:
-			// skip these keys too, they come next
-			if _, exists := cidOptsIdx[o.LongName()]; !exists {
-				anl.statSummary.SysStats.ArgvExpanded = append(
-					anl.statSummary.SysStats.ArgvExpanded, fmt.Sprintf(`--%s=%s`,
-						o.LongName(),
-						o.Value().String(),
-					),
-				)
-			}
-		}
-	})
-	sort.Strings(anl.statSummary.SysStats.ArgvExpanded)
-
-	// now do the remaining cid-determining options
-	for _, n := range cidOpts {
-		anl.statSummary.SysStats.ArgvExpanded = append(
-			anl.statSummary.SysStats.ArgvExpanded, fmt.Sprintf(`--%s=%s`,
-				n,
-				cfg.optSet.GetValue(n),
-			),
-		)
-	}
-
-	return
-}
 
 func (cfg *config) printUsage() {
 	cfg.optSet.PrintUsage(argParseErrOut)
@@ -264,7 +94,7 @@ func printPluginUsage(
 			if len(h) == 0 {
 				fmt.Fprint(out, "  -- no helptext available --\n\n")
 			} else {
-				fmt.Fprintln(out, strings.Join(h, "\n"))
+				fmt.Fprintln(out, strings.Join(getErrrStrings(h), "\n"))
 			}
 		}
 	}
@@ -282,7 +112,7 @@ func printPluginUsage(
 			if len(h) == 0 {
 				fmt.Fprint(out, "  -- no helptext available --\n\n")
 			} else {
-				fmt.Fprintln(out, strings.Join(h, "\n"))
+				fmt.Fprintln(out, strings.Join(getErrrStrings(h), "\n"))
 			}
 		}
 	}
@@ -300,7 +130,7 @@ func printPluginUsage(
 			if len(h) == 0 {
 				fmt.Fprint(out, "  -- no helptext available --\n\n")
 			} else {
-				fmt.Fprintln(out, strings.Join(h, "\n"))
+				fmt.Fprintln(out, strings.Join(getErrrStrings(h), "\n"))
 			}
 		}
 	}
@@ -346,20 +176,20 @@ func (cfg *config) initArgvParser() {
 	)
 }
 
-func (anl *Anelace) setupEmitters() (argErrs []string) {
+func (anl *Anelace) setupEmitters() (argErrs []error) {
 
 	activeStderr := make(map[string]bool, len(anl.cfg.emittersStdErr))
 	for _, s := range anl.cfg.emittersStdErr {
 		activeStderr[s] = true
 		if val, exists := anl.cfg.emitters[s]; !exists {
-			argErrs = append(argErrs, fmt.Sprintf("invalid emitter '%s' specified for --emit-stderr. Available emitters are: %s",
+			argErrs = append(argErrs, fmt.Errorf("invalid emitter '%s' specified for --emit-stderr. Available emitters are: %s",
 				s,
 				text.AvailableMapKeys(anl.cfg.emitters),
 			))
 		} else if s == emNone {
 			continue
 		} else if val != nil {
-			argErrs = append(argErrs, fmt.Sprintf("Emitter '%s' specified more than once", s))
+			argErrs = append(argErrs, fmt.Errorf("Emitter '%s' specified more than once", s))
 		} else {
 			anl.cfg.emitters[s] = os.Stderr
 		}
@@ -368,14 +198,14 @@ func (anl *Anelace) setupEmitters() (argErrs []string) {
 	for _, s := range anl.cfg.emittersStdOut {
 		activeStdout[s] = true
 		if val, exists := anl.cfg.emitters[s]; !exists {
-			argErrs = append(argErrs, fmt.Sprintf("invalid emitter '%s' specified for --emit-stdout. Available emitters are: %s",
+			argErrs = append(argErrs, fmt.Errorf("invalid emitter '%s' specified for --emit-stdout. Available emitters are: %s",
 				s,
 				text.AvailableMapKeys(anl.cfg.emitters),
 			))
 		} else if s == emNone {
 			continue
 		} else if val != nil {
-			argErrs = append(argErrs, fmt.Sprintf("Emitter '%s' specified more than once", s))
+			argErrs = append(argErrs, fmt.Errorf("Emitter '%s' specified more than once", s))
 		} else {
 			anl.cfg.emitters[s] = os.Stdout
 		}
@@ -387,13 +217,13 @@ func (anl *Anelace) setupEmitters() (argErrs []string) {
 		emCarV1Stream,
 	} {
 		if activeStderr[exclusiveEmitter] && len(activeStderr) > 1 {
-			argErrs = append(argErrs, fmt.Sprintf(
+			argErrs = append(argErrs, fmt.Errorf(
 				"When specified, emitter '%s' must be the sole argument to --emit-stderr",
 				exclusiveEmitter,
 			))
 		}
 		if activeStdout[exclusiveEmitter] && len(activeStdout) > 1 {
-			argErrs = append(argErrs, fmt.Sprintf(
+			argErrs = append(argErrs, fmt.Errorf(
 				"When specified, emitter '%s' must be the sole argument to --emit-stdout",
 				exclusiveEmitter,
 			))
@@ -406,14 +236,14 @@ func (anl *Anelace) setupEmitters() (argErrs []string) {
 	return
 }
 
-func (anl *Anelace) setupCarWriting() (argErrs []string) {
+func (anl *Anelace) setupCarWriting() (argErrs []error) {
 
 	if (anl.cfg.StatsActive & statsBlocks) != statsBlocks {
-		argErrs = append(argErrs, "disabling blockstat collection conflicts with streaming .car data")
+		argErrs = append(argErrs, fmt.Errorf("disabling blockstat collection conflicts with streaming .car data"))
 	}
 
 	if stream.IsTTY(anl.cfg.emitters[emCarV1Stream]) {
-		argErrs = append(argErrs, "output of .car streams to a TTY is not supported")
+		argErrs = append(argErrs, fmt.Errorf("output of .car streams to a TTY is not supported"))
 	}
 
 	if len(argErrs) > 0 {
@@ -439,14 +269,14 @@ func (anl *Anelace) setupCarWriting() (argErrs []string) {
 
 // Parses/creates the blockmaker/nodeencoder, to pass in turn to the collector chain
 // Not stored in the anl object itself, to cut down on logic leaks
-func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []string) {
+func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []error) {
 
 	cfg := anl.cfg
 
 	var blockMaker anlblock.Maker
 	if _, exists := anlblock.AvailableHashers[cfg.hashFunc]; !exists {
 
-		argErrs = append(argErrs, fmt.Sprintf(
+		argErrs = append(argErrs, fmt.Errorf(
 			"Hash function '%s' requested via '--hash=algname' is not valid. Available hash names are %s",
 			cfg.hashFunc,
 			text.AvailableMapKeys(anlblock.AvailableHashers),
@@ -457,15 +287,15 @@ func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []s
 			cfg.AsyncHashers = 0
 		}
 
-		var errStr string
-		blockMaker, anl.asyncHashingBus, errStr = anlblock.MakerFromConfig(
+		var err error
+		blockMaker, anl.asyncHashingBus, err = anlblock.MakerFromConfig(
 			cfg.hashFunc,
 			cfg.HashBits/8,
 			cfg.InlineMaxSize,
 			cfg.AsyncHashers,
 		)
-		if errStr != "" {
-			argErrs = append(argErrs, errStr)
+		if err != nil {
+			argErrs = append(argErrs, err)
 		}
 	}
 
@@ -479,7 +309,7 @@ func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []s
 	if anl.cfg.CidMultibase == "base32" {
 		b32Encoder = base32.NewEncoding("abcdefghijklmnopqrstuvwxyz234567").WithPadding(base32.NoPadding)
 	} else if anl.cfg.CidMultibase != "base36" {
-		argErrs = append(argErrs, fmt.Sprintf("unsupported cid multibase '%s'", anl.cfg.CidMultibase))
+		argErrs = append(argErrs, fmt.Errorf("unsupported cid multibase '%s'", anl.cfg.CidMultibase))
 		return
 	}
 
@@ -510,7 +340,7 @@ func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []s
 
 	nodeEncArgs := strings.Split(cfg.requestedNodeEncoder, "_")
 	if init, exists := availableNodeEncoders[nodeEncArgs[0]]; !exists {
-		argErrs = append(argErrs, fmt.Sprintf(
+		argErrs = append(argErrs, fmt.Errorf(
 			"Encoder '%s' not found. Available encoder names are: %s",
 			nodeEncArgs[0],
 			text.AvailableMapKeys(availableNodeEncoders),
@@ -522,7 +352,7 @@ func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []s
 			}
 		}
 
-		var initErrors []string
+		var initErrors []error
 		if nodeEnc, initErrors = init(
 			nodeEncArgs,
 			&anlencoder.AnlConfig{
@@ -540,7 +370,7 @@ func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []s
 		); len(initErrors) > 0 {
 			cfg.erroredNodeEncoders = append(cfg.erroredNodeEncoders, nodeEncArgs[0])
 			for _, e := range initErrors {
-				argErrs = append(argErrs, fmt.Sprintf(
+				argErrs = append(argErrs, fmt.Errorf(
 					"Initialization of node encoder '%s' failed: %s",
 					nodeEncArgs[0],
 					e,
@@ -552,20 +382,20 @@ func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []s
 	return
 }
 
-func (anl *Anelace) setupChunker() (argErrs []string) {
+func (anl *Anelace) setupChunker() (argErrs []error) {
 
 	if anl.cfg.requestedChunker == "" {
-		return []string{
-			"You must specify a stream chunker via '--chunker=algname1_opt1_opt2...'. Available chunker names are: " +
-				text.AvailableMapKeys(availableChunkers),
+		return []error{
+			fmt.Errorf("You must specify a stream chunker via '--chunker=algname1_opt1_opt2...'. Available chunker names are: " +
+				text.AvailableMapKeys(availableChunkers)),
 		}
 	}
 
 	chunkerArgs := strings.Split(anl.cfg.requestedChunker, "_")
 	init, exists := availableChunkers[chunkerArgs[0]]
 	if !exists {
-		return []string{
-			fmt.Sprintf(
+		return []error{
+			fmt.Errorf(
 				"Chunker '%s' not found. Available chunker names are: %s",
 				chunkerArgs[0],
 				text.AvailableMapKeys(availableChunkers),
@@ -583,13 +413,13 @@ func (anl *Anelace) setupChunker() (argErrs []string) {
 
 	if len(initErrors) == 0 {
 		if chunkerConstants.MaxChunkSize < 1 || chunkerConstants.MaxChunkSize > constants.MaxLeafPayloadSize {
-			initErrors = append(initErrors, fmt.Sprintf(
+			initErrors = append(initErrors, fmt.Errorf(
 				"returned MaxChunkSize constant '%d' out of range [1:%d]",
 				chunkerConstants.MaxChunkSize,
 				constants.MaxLeafPayloadSize,
 			))
 		} else if chunkerConstants.MinChunkSize < 0 || chunkerConstants.MinChunkSize > chunkerConstants.MaxChunkSize {
-			initErrors = append(initErrors, fmt.Sprintf(
+			initErrors = append(initErrors, fmt.Errorf(
 				"returned MinChunkSize constant '%d' out of range [0:%d]",
 				chunkerConstants.MinChunkSize,
 				chunkerConstants.MaxChunkSize,
@@ -600,8 +430,8 @@ func (anl *Anelace) setupChunker() (argErrs []string) {
 	if len(initErrors) > 0 {
 		anl.cfg.erroredChunkers = append(anl.cfg.erroredChunkers, chunkerArgs[0])
 		for _, e := range initErrors {
-			argErrs = append(argErrs, fmt.Sprintf(
-				"Initialization of chunker '%s' failed: %s",
+			argErrs = append(argErrs, fmt.Errorf(
+				"initialization of chunker '%s' failed: %s",
 				chunkerArgs[0],
 				e,
 			))
@@ -617,20 +447,20 @@ func (anl *Anelace) setupChunker() (argErrs []string) {
 	return
 }
 
-func (anl *Anelace) setupCollector(nodeEnc anlencoder.NodeEncoder) (argErrs []string) {
+func (anl *Anelace) setupCollector(nodeEnc anlencoder.NodeEncoder) (argErrs []error) {
 
 	if anl.cfg.optSet.IsSet("collector") && anl.cfg.requestedCollector == "" {
-		return []string{
-			"When specified, collector arg must be in the form '--collector=algname_opt1_opt2...'. Available collector names are: " +
-				text.AvailableMapKeys(availableCollectors),
+		return []error{
+			fmt.Errorf("When specified, collector arg must be in the form '--collector=algname_opt1_opt2...'. Available collector names are: " +
+				text.AvailableMapKeys(availableCollectors)),
 		}
 	}
 
 	collectorArgs := strings.Split(anl.cfg.requestedCollector, "_")
 	init, exists := availableCollectors[collectorArgs[0]]
 	if !exists {
-		return []string{
-			fmt.Sprintf(
+		return []error{
+			fmt.Errorf(
 				"Collector '%s' not found. Available collector names are: %s",
 				collectorArgs[0],
 				text.AvailableMapKeys(availableCollectors),
@@ -652,7 +482,7 @@ func (anl *Anelace) setupCollector(nodeEnc anlencoder.NodeEncoder) (argErrs []st
 	if len(initErrors) > 0 {
 		anl.cfg.erroredCollectors = append(anl.cfg.erroredCollectors, collectorArgs[0])
 		for _, e := range initErrors {
-			argErrs = append(argErrs, fmt.Sprintf(
+			argErrs = append(argErrs, fmt.Errorf(
 				"Initialization of collector '%s' failed: %s",
 				collectorArgs[0],
 				e,
@@ -663,10 +493,6 @@ func (anl *Anelace) setupCollector(nodeEnc anlencoder.NodeEncoder) (argErrs []st
 
 	anl.collector = collectorInstance
 	return
-}
-
-func inlineMaxSizeWithinBounds(ims int) bool {
-	return ims == 0 || (ims >= 4 && ims < constants.MaxLeafPayloadSize)
 }
 
 type compatIpfsArgs struct {
@@ -680,7 +506,7 @@ type compatIpfsArgs struct {
 	Hasher           string `getopt:"--hash"`
 }
 
-func (cfg *config) presetFromIPFS() (parseErrors []string) {
+func (cfg *config) presetFromIPFS() (parseErrors []error) {
 
 	lVals, optSet := options.RegisterNew("", &compatIpfsArgs{
 		Chunker:    "size",
@@ -691,13 +517,13 @@ func (cfg *config) presetFromIPFS() (parseErrors []string) {
 	args := append([]string{"ipfs-compat"}, strings.Split(cfg.IpfsCompatCmd, " ")...)
 	for {
 		if err := optSet.Getopt(args, nil); err != nil {
-			parseErrors = append(parseErrors, err.Error())
+			parseErrors = append(parseErrors, err)
 		}
 		args = optSet.Args()
 		if len(args) == 0 {
 			break
 		} else if args[0] != "" && args[0] != "add" { // next iteration will eat the chaff as a "progname"
-			parseErrors = append(parseErrors, fmt.Sprintf(
+			parseErrors = append(parseErrors, fmt.Errorf(
 				"unexpected ipfs-compatible parameter(s): %s...",
 				args[0],
 			))
@@ -750,8 +576,7 @@ func (cfg *config) presetFromIPFS() (parseErrors []string) {
 			} else {
 				parseErrors = append(
 					parseErrors,
-					fmt.Sprintf("--cid-version=%d is unsupported ( try --cid-version=1 or --upgrade-cidv0-in-output )", ipfsOpts.CidVersion),
-				)
+					fmt.Errorf("--cid-version=%d is unsupported ( try --cid-version=1 or --upgrade-cidv0-in-output )", ipfsOpts.CidVersion))
 			}
 		} else if !optSet.IsSet("raw-leaves") {
 			ipfsOpts.UseRawLeaves = true
@@ -826,10 +651,44 @@ func (cfg *config) presetFromIPFS() (parseErrors []string) {
 		if cfg.requestedChunker == "" {
 			parseErrors = append(
 				parseErrors,
-				fmt.Sprintf("Invalid ipfs-compatible spec --chunker=%s", ipfsOpts.Chunker),
+				fmt.Errorf("Invalid ipfs-compatible spec --chunker=%s", ipfsOpts.Chunker),
 			)
 		}
 	}
 
 	return parseErrors
+}
+
+func getInitialArgs(argv []string) []string {
+	argvInitial := make([]string, len(argv)-1)
+	copy(argvInitial, argv[1:])
+	return argvInitial
+}
+
+func logArgParseErrors(argParseErrs []error, cfg *config) {
+
+	errStrings := getErrrStrings(argParseErrs)
+
+	if len(argParseErrs) != 0 {
+		fmt.Fprint(argParseErrOut, "\nFatal error parsing arguments:\n\n")
+		cfg.printUsage()
+
+		sort.Strings(errStrings)
+		fmt.Fprintf(
+			argParseErrOut,
+			"Fatal error parsing arguments:\n\t%s\n",
+			strings.Join(errStrings, "\n\t"),
+		)
+		os.Exit(2)
+	}
+}
+
+func getErrrStrings(errs []error) (errStrings []string) {
+
+	for _, err := range errs {
+		errStrings = append(errStrings, err.Error())
+	}
+
+	return
+
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/pborman/options"
 )
 
-func NewCollector(args []string, anlCfg *anlcollector.AnlConfig) (_ anlcollector.Collector, initErrs []string) {
+func NewCollector(args []string, anlCfg *anlcollector.AnlConfig) (_ anlcollector.Collector, initErrs []error) {
 
 	co := &collector{
 		AnlConfig: anlCfg,
@@ -18,7 +18,7 @@ func NewCollector(args []string, anlCfg *anlcollector.AnlConfig) (_ anlcollector
 
 	optSet := getopt.New()
 	if err := options.RegisterSet("", &co.config, optSet); err != nil {
-		initErrs = []string{fmt.Sprintf("option set registration failed: %s", err)}
+		initErrs = []error{fmt.Errorf("option set registration failed: %s", err)}
 		return
 	}
 

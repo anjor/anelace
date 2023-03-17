@@ -15,14 +15,14 @@ func NewChunker(
 ) (
 	_ anlchunker.Chunker,
 	_ anlchunker.InstanceConstants,
-	initErrs []string,
+	initErrs []error,
 ) {
 
 	c := rabinChunker{}
 
 	optSet := getopt.New()
 	if err := options.RegisterSet("", &c.config, optSet); err != nil {
-		initErrs = []string{fmt.Sprintf("option set registration failed: %s", err)}
+		initErrs = []error{fmt.Errorf("option set registration failed: %s", err)}
 		return
 	}
 
@@ -45,14 +45,14 @@ func NewChunker(
 
 	if c.MinSize >= c.MaxSize {
 		initErrs = append(initErrs,
-			"value for 'max-size' must be larger than 'min-size'",
+			fmt.Errorf("value for 'max-size' must be larger than 'min-size'"),
 		)
 	}
 
 	var err error
 	c.outTable, c.modTable, err = bootstrap.GenerateLookupTables(c.Polynomial, c.WindowSize)
 	if err != nil {
-		initErrs = append(initErrs, err.Error())
+		initErrs = append(initErrs, err)
 	}
 
 	c.mask = 1<<uint(c.MaskBits) - 1

@@ -12,7 +12,7 @@ type NodeEncoder interface {
 type Initializer func(
 	encoderCLISubArgs []string,
 	acfg *AnlConfig,
-) (instance NodeEncoder, initErrorStrings []string)
+) (instance NodeEncoder, initErrorStrings []error)
 
 type AnlConfig struct {
 	HasherBits           int
