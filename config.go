@@ -1,6 +1,7 @@
 package anelace
 
 import (
+	"github.com/anjor/anelace/internal/constants"
 	"github.com/klauspost/cpuid/v2"
 	"github.com/pborman/getopt/v2"
 	"os"
@@ -120,4 +121,12 @@ func getFeatureSet() string {
 	feats := cpuid.CPU.FeatureSet()
 	sort.Strings(feats)
 	return strings.Join(feats, " ")
+}
+
+func checkHashBits(hashBits int) error {
+	return nil
+}
+
+func inlineMaxSizeWithinBounds(ims int) bool {
+	return ims == 0 || (ims >= 4 && ims < constants.MaxLeafPayloadSize)
 }

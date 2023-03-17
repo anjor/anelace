@@ -21,7 +21,6 @@ import (
 	"io"
 	"os"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/ipfs/go-qringbuf"
@@ -89,13 +88,7 @@ func NewAnelace() *Anelace {
 func NewAnelaceFromArgv(argv []string) (anl *Anelace) {
 
 	anl = NewAnelace()
-
-	// populate args
-	{
-		s := &anl.statSummary
-		s.SysStats.ArgvInitial = make([]string, len(argv)-1)
-		copy(s.SysStats.ArgvInitial, argv[1:])
-	}
+	anl.statSummary.SysStats.ArgvInitial = getInitialArgs(argv)
 
 	cfg := &anl.cfg
 	cfg.initArgvParser()
@@ -117,12 +110,12 @@ func NewAnelaceFromArgv(argv []string) (anl *Anelace) {
 
 	// has a default
 	if cfg.HashBits < 128 || (cfg.HashBits%8) != 0 {
-		argParseErrs = append(argParseErrs, "The value of --hash-bits must be a minimum of 128 and be divisible by 8")
+		argParseErrs = append(argParseErrs, fmt.Errorf("The value of --hash-bits must be a minimum of 128 and be divisible by 8"))
 	}
 
 	if !inlineMaxSizeWithinBounds(cfg.InlineMaxSize) {
 		argParseErrs = append(argParseErrs,
-			fmt.Sprintf("--inline-max-size '%s' out of bounds 0 or [4:%d]",
+			fmt.Errorf("--inline-max-size '%s' out of bounds 0 or [4:%d]",
 				text.Commify(cfg.InlineMaxSize),
 				constants.MaxLeafPayloadSize,
 			))
@@ -141,18 +134,7 @@ func NewAnelaceFromArgv(argv []string) (anl *Anelace) {
 		argParseErrs = append(argParseErrs, anl.setupCarWriting()...)
 	}
 
-	if len(argParseErrs) != 0 {
-		fmt.Fprint(argParseErrOut, "\nFatal error parsing arguments:\n\n")
-		cfg.printUsage()
-
-		sort.Strings(argParseErrs)
-		fmt.Fprintf(
-			argParseErrOut,
-			"Fatal error parsing arguments:\n\t%s\n",
-			strings.Join(argParseErrs, "\n\t"),
-		)
-		os.Exit(2)
-	}
+	logArgParseErrors(argParseErrs, cfg)
 
 	// Opts *still* check out - take a snapshot of what we ended up with
 
@@ -210,4 +192,8 @@ func (anl *Anelace) Destroy() {
 	}
 	anl.qrb = nil
 	anl.mu.Unlock()
+}
+
+func (anl *Anelace) SetCarWriter(w io.Writer) {
+	anl.carDataWriter = w
 }

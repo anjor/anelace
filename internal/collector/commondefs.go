@@ -14,7 +14,7 @@ type Collector interface {
 type Initializer func(
 	collectorCLISubArgs []string,
 	acfg *AnlConfig,
-) (instance Collector, initErrorStrings []string)
+) (instance Collector, initErrorStrings []error)
 
 type AnlConfig struct {
 	NodeEncoder anlencoder.NodeEncoder

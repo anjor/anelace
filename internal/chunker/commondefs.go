@@ -15,7 +15,7 @@ type Initializer func(
 ) (
 	instance Chunker,
 	constants InstanceConstants,
-	initErrorStrings []string,
+	initErrorStrings []error,
 )
 
 type Chunker interface {

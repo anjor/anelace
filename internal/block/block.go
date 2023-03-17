@@ -155,11 +155,11 @@ func MakerFromConfig(
 	cidHashSize int,
 	inlineMaxSize int,
 	maxAsyncHashers int,
-) (maker Maker, asyncHashQueue chan hashTask, errString string) {
+) (maker Maker, asyncHashQueue chan hashTask, err error) {
 
 	hashopts, found := AvailableHashers[hashAlg]
 	if !found {
-		errString = fmt.Sprintf(
+		err = fmt.Errorf(
 			"invalid hash function '%s'. Available hash names are %s",
 			hashAlg,
 			text.AvailableMapKeys(AvailableHashers),
@@ -175,7 +175,7 @@ func MakerFromConfig(
 	}
 
 	if nativeHashSize < cidHashSize {
-		errString = fmt.Sprintf(
+		err = fmt.Errorf(
 			"selected hash function '%s' does not produce a digest satisfying the requested amount of --hash-bits '%d'",
 			hashAlg,
 			cidHashSize*8,
@@ -184,7 +184,7 @@ func MakerFromConfig(
 	}
 
 	if maxAsyncHashers < 0 {
-		errString = fmt.Sprintf(
+		err = fmt.Errorf(
 			"invalid negative value '%d' for maxAsyncHashers",
 			maxAsyncHashers,
 		)
@@ -273,9 +273,9 @@ func MakerFromConfig(
 				make(
 					[]byte,
 					0,
-					(len(codecs[codecID].identityCidPrefix)+
+					len(codecs[codecID].identityCidPrefix)+
 						encoding.VarintWireSize(uint64(hdr.sizeBlock))+
-						blockContent.Size()),
+						blockContent.Size(),
 				),
 				codecs[codecID].identityCidPrefix...,
 			)
@@ -291,7 +291,7 @@ func MakerFromConfig(
 				make(
 					[]byte,
 					0,
-					(len(codecs[codecID].hashedCidPrefix)+nativeHashSize),
+					len(codecs[codecID].hashedCidPrefix)+nativeHashSize,
 				),
 				codecs[codecID].hashedCidPrefix...,
 			)

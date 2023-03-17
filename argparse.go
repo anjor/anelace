@@ -94,7 +94,7 @@ func printPluginUsage(
 			if len(h) == 0 {
 				fmt.Fprint(out, "  -- no helptext available --\n\n")
 			} else {
-				fmt.Fprintln(out, strings.Join(h, "\n"))
+				fmt.Fprintln(out, strings.Join(getErrrStrings(h), "\n"))
 			}
 		}
 	}
@@ -112,7 +112,7 @@ func printPluginUsage(
 			if len(h) == 0 {
 				fmt.Fprint(out, "  -- no helptext available --\n\n")
 			} else {
-				fmt.Fprintln(out, strings.Join(h, "\n"))
+				fmt.Fprintln(out, strings.Join(getErrrStrings(h), "\n"))
 			}
 		}
 	}
@@ -130,7 +130,7 @@ func printPluginUsage(
 			if len(h) == 0 {
 				fmt.Fprint(out, "  -- no helptext available --\n\n")
 			} else {
-				fmt.Fprintln(out, strings.Join(h, "\n"))
+				fmt.Fprintln(out, strings.Join(getErrrStrings(h), "\n"))
 			}
 		}
 	}
@@ -176,20 +176,20 @@ func (cfg *config) initArgvParser() {
 	)
 }
 
-func (anl *Anelace) setupEmitters() (argErrs []string) {
+func (anl *Anelace) setupEmitters() (argErrs []error) {
 
 	activeStderr := make(map[string]bool, len(anl.cfg.emittersStdErr))
 	for _, s := range anl.cfg.emittersStdErr {
 		activeStderr[s] = true
 		if val, exists := anl.cfg.emitters[s]; !exists {
-			argErrs = append(argErrs, fmt.Sprintf("invalid emitter '%s' specified for --emit-stderr. Available emitters are: %s",
+			argErrs = append(argErrs, fmt.Errorf("invalid emitter '%s' specified for --emit-stderr. Available emitters are: %s",
 				s,
 				text.AvailableMapKeys(anl.cfg.emitters),
 			))
 		} else if s == emNone {
 			continue
 		} else if val != nil {
-			argErrs = append(argErrs, fmt.Sprintf("Emitter '%s' specified more than once", s))
+			argErrs = append(argErrs, fmt.Errorf("Emitter '%s' specified more than once", s))
 		} else {
 			anl.cfg.emitters[s] = os.Stderr
 		}
@@ -198,14 +198,14 @@ func (anl *Anelace) setupEmitters() (argErrs []string) {
 	for _, s := range anl.cfg.emittersStdOut {
 		activeStdout[s] = true
 		if val, exists := anl.cfg.emitters[s]; !exists {
-			argErrs = append(argErrs, fmt.Sprintf("invalid emitter '%s' specified for --emit-stdout. Available emitters are: %s",
+			argErrs = append(argErrs, fmt.Errorf("invalid emitter '%s' specified for --emit-stdout. Available emitters are: %s",
 				s,
 				text.AvailableMapKeys(anl.cfg.emitters),
 			))
 		} else if s == emNone {
 			continue
 		} else if val != nil {
-			argErrs = append(argErrs, fmt.Sprintf("Emitter '%s' specified more than once", s))
+			argErrs = append(argErrs, fmt.Errorf("Emitter '%s' specified more than once", s))
 		} else {
 			anl.cfg.emitters[s] = os.Stdout
 		}
@@ -217,13 +217,13 @@ func (anl *Anelace) setupEmitters() (argErrs []string) {
 		emCarV1Stream,
 	} {
 		if activeStderr[exclusiveEmitter] && len(activeStderr) > 1 {
-			argErrs = append(argErrs, fmt.Sprintf(
+			argErrs = append(argErrs, fmt.Errorf(
 				"When specified, emitter '%s' must be the sole argument to --emit-stderr",
 				exclusiveEmitter,
 			))
 		}
 		if activeStdout[exclusiveEmitter] && len(activeStdout) > 1 {
-			argErrs = append(argErrs, fmt.Sprintf(
+			argErrs = append(argErrs, fmt.Errorf(
 				"When specified, emitter '%s' must be the sole argument to --emit-stdout",
 				exclusiveEmitter,
 			))
@@ -236,14 +236,14 @@ func (anl *Anelace) setupEmitters() (argErrs []string) {
 	return
 }
 
-func (anl *Anelace) setupCarWriting() (argErrs []string) {
+func (anl *Anelace) setupCarWriting() (argErrs []error) {
 
 	if (anl.cfg.StatsActive & statsBlocks) != statsBlocks {
-		argErrs = append(argErrs, "disabling blockstat collection conflicts with streaming .car data")
+		argErrs = append(argErrs, fmt.Errorf("disabling blockstat collection conflicts with streaming .car data"))
 	}
 
 	if stream.IsTTY(anl.cfg.emitters[emCarV1Stream]) {
-		argErrs = append(argErrs, "output of .car streams to a TTY is not supported")
+		argErrs = append(argErrs, fmt.Errorf("output of .car streams to a TTY is not supported"))
 	}
 
 	if len(argErrs) > 0 {
@@ -269,14 +269,14 @@ func (anl *Anelace) setupCarWriting() (argErrs []string) {
 
 // Parses/creates the blockmaker/nodeencoder, to pass in turn to the collector chain
 // Not stored in the anl object itself, to cut down on logic leaks
-func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []string) {
+func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []error) {
 
 	cfg := anl.cfg
 
 	var blockMaker anlblock.Maker
 	if _, exists := anlblock.AvailableHashers[cfg.hashFunc]; !exists {
 
-		argErrs = append(argErrs, fmt.Sprintf(
+		argErrs = append(argErrs, fmt.Errorf(
 			"Hash function '%s' requested via '--hash=algname' is not valid. Available hash names are %s",
 			cfg.hashFunc,
 			text.AvailableMapKeys(anlblock.AvailableHashers),
@@ -287,15 +287,15 @@ func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []s
 			cfg.AsyncHashers = 0
 		}
 
-		var errStr string
-		blockMaker, anl.asyncHashingBus, errStr = anlblock.MakerFromConfig(
+		var err error
+		blockMaker, anl.asyncHashingBus, err = anlblock.MakerFromConfig(
 			cfg.hashFunc,
 			cfg.HashBits/8,
 			cfg.InlineMaxSize,
 			cfg.AsyncHashers,
 		)
-		if errStr != "" {
-			argErrs = append(argErrs, errStr)
+		if err != nil {
+			argErrs = append(argErrs, err)
 		}
 	}
 
@@ -309,7 +309,7 @@ func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []s
 	if anl.cfg.CidMultibase == "base32" {
 		b32Encoder = base32.NewEncoding("abcdefghijklmnopqrstuvwxyz234567").WithPadding(base32.NoPadding)
 	} else if anl.cfg.CidMultibase != "base36" {
-		argErrs = append(argErrs, fmt.Sprintf("unsupported cid multibase '%s'", anl.cfg.CidMultibase))
+		argErrs = append(argErrs, fmt.Errorf("unsupported cid multibase '%s'", anl.cfg.CidMultibase))
 		return
 	}
 
@@ -340,7 +340,7 @@ func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []s
 
 	nodeEncArgs := strings.Split(cfg.requestedNodeEncoder, "_")
 	if init, exists := availableNodeEncoders[nodeEncArgs[0]]; !exists {
-		argErrs = append(argErrs, fmt.Sprintf(
+		argErrs = append(argErrs, fmt.Errorf(
 			"Encoder '%s' not found. Available encoder names are: %s",
 			nodeEncArgs[0],
 			text.AvailableMapKeys(availableNodeEncoders),
@@ -352,7 +352,7 @@ func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []s
 			}
 		}
 
-		var initErrors []string
+		var initErrors []error
 		if nodeEnc, initErrors = init(
 			nodeEncArgs,
 			&anlencoder.AnlConfig{
@@ -370,7 +370,7 @@ func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []s
 		); len(initErrors) > 0 {
 			cfg.erroredNodeEncoders = append(cfg.erroredNodeEncoders, nodeEncArgs[0])
 			for _, e := range initErrors {
-				argErrs = append(argErrs, fmt.Sprintf(
+				argErrs = append(argErrs, fmt.Errorf(
 					"Initialization of node encoder '%s' failed: %s",
 					nodeEncArgs[0],
 					e,
@@ -382,20 +382,20 @@ func (anl *Anelace) setupEncoding() (nodeEnc anlencoder.NodeEncoder, argErrs []s
 	return
 }
 
-func (anl *Anelace) setupChunker() (argErrs []string) {
+func (anl *Anelace) setupChunker() (argErrs []error) {
 
 	if anl.cfg.requestedChunker == "" {
-		return []string{
-			"You must specify a stream chunker via '--chunker=algname1_opt1_opt2...'. Available chunker names are: " +
-				text.AvailableMapKeys(availableChunkers),
+		return []error{
+			fmt.Errorf("You must specify a stream chunker via '--chunker=algname1_opt1_opt2...'. Available chunker names are: " +
+				text.AvailableMapKeys(availableChunkers)),
 		}
 	}
 
 	chunkerArgs := strings.Split(anl.cfg.requestedChunker, "_")
 	init, exists := availableChunkers[chunkerArgs[0]]
 	if !exists {
-		return []string{
-			fmt.Sprintf(
+		return []error{
+			fmt.Errorf(
 				"Chunker '%s' not found. Available chunker names are: %s",
 				chunkerArgs[0],
 				text.AvailableMapKeys(availableChunkers),
@@ -413,13 +413,13 @@ func (anl *Anelace) setupChunker() (argErrs []string) {
 
 	if len(initErrors) == 0 {
 		if chunkerConstants.MaxChunkSize < 1 || chunkerConstants.MaxChunkSize > constants.MaxLeafPayloadSize {
-			initErrors = append(initErrors, fmt.Sprintf(
+			initErrors = append(initErrors, fmt.Errorf(
 				"returned MaxChunkSize constant '%d' out of range [1:%d]",
 				chunkerConstants.MaxChunkSize,
 				constants.MaxLeafPayloadSize,
 			))
 		} else if chunkerConstants.MinChunkSize < 0 || chunkerConstants.MinChunkSize > chunkerConstants.MaxChunkSize {
-			initErrors = append(initErrors, fmt.Sprintf(
+			initErrors = append(initErrors, fmt.Errorf(
 				"returned MinChunkSize constant '%d' out of range [0:%d]",
 				chunkerConstants.MinChunkSize,
 				chunkerConstants.MaxChunkSize,
@@ -430,8 +430,8 @@ func (anl *Anelace) setupChunker() (argErrs []string) {
 	if len(initErrors) > 0 {
 		anl.cfg.erroredChunkers = append(anl.cfg.erroredChunkers, chunkerArgs[0])
 		for _, e := range initErrors {
-			argErrs = append(argErrs, fmt.Sprintf(
-				"Initialization of chunker '%s' failed: %s",
+			argErrs = append(argErrs, fmt.Errorf(
+				"initialization of chunker '%s' failed: %s",
 				chunkerArgs[0],
 				e,
 			))
@@ -447,20 +447,20 @@ func (anl *Anelace) setupChunker() (argErrs []string) {
 	return
 }
 
-func (anl *Anelace) setupCollector(nodeEnc anlencoder.NodeEncoder) (argErrs []string) {
+func (anl *Anelace) setupCollector(nodeEnc anlencoder.NodeEncoder) (argErrs []error) {
 
 	if anl.cfg.optSet.IsSet("collector") && anl.cfg.requestedCollector == "" {
-		return []string{
-			"When specified, collector arg must be in the form '--collector=algname_opt1_opt2...'. Available collector names are: " +
-				text.AvailableMapKeys(availableCollectors),
+		return []error{
+			fmt.Errorf("When specified, collector arg must be in the form '--collector=algname_opt1_opt2...'. Available collector names are: " +
+				text.AvailableMapKeys(availableCollectors)),
 		}
 	}
 
 	collectorArgs := strings.Split(anl.cfg.requestedCollector, "_")
 	init, exists := availableCollectors[collectorArgs[0]]
 	if !exists {
-		return []string{
-			fmt.Sprintf(
+		return []error{
+			fmt.Errorf(
 				"Collector '%s' not found. Available collector names are: %s",
 				collectorArgs[0],
 				text.AvailableMapKeys(availableCollectors),
@@ -482,7 +482,7 @@ func (anl *Anelace) setupCollector(nodeEnc anlencoder.NodeEncoder) (argErrs []st
 	if len(initErrors) > 0 {
 		anl.cfg.erroredCollectors = append(anl.cfg.erroredCollectors, collectorArgs[0])
 		for _, e := range initErrors {
-			argErrs = append(argErrs, fmt.Sprintf(
+			argErrs = append(argErrs, fmt.Errorf(
 				"Initialization of collector '%s' failed: %s",
 				collectorArgs[0],
 				e,
@@ -493,10 +493,6 @@ func (anl *Anelace) setupCollector(nodeEnc anlencoder.NodeEncoder) (argErrs []st
 
 	anl.collector = collectorInstance
 	return
-}
-
-func inlineMaxSizeWithinBounds(ims int) bool {
-	return ims == 0 || (ims >= 4 && ims < constants.MaxLeafPayloadSize)
 }
 
 type compatIpfsArgs struct {
@@ -510,7 +506,7 @@ type compatIpfsArgs struct {
 	Hasher           string `getopt:"--hash"`
 }
 
-func (cfg *config) presetFromIPFS() (parseErrors []string) {
+func (cfg *config) presetFromIPFS() (parseErrors []error) {
 
 	lVals, optSet := options.RegisterNew("", &compatIpfsArgs{
 		Chunker:    "size",
@@ -521,13 +517,13 @@ func (cfg *config) presetFromIPFS() (parseErrors []string) {
 	args := append([]string{"ipfs-compat"}, strings.Split(cfg.IpfsCompatCmd, " ")...)
 	for {
 		if err := optSet.Getopt(args, nil); err != nil {
-			parseErrors = append(parseErrors, err.Error())
+			parseErrors = append(parseErrors, err)
 		}
 		args = optSet.Args()
 		if len(args) == 0 {
 			break
 		} else if args[0] != "" && args[0] != "add" { // next iteration will eat the chaff as a "progname"
-			parseErrors = append(parseErrors, fmt.Sprintf(
+			parseErrors = append(parseErrors, fmt.Errorf(
 				"unexpected ipfs-compatible parameter(s): %s...",
 				args[0],
 			))
@@ -580,8 +576,7 @@ func (cfg *config) presetFromIPFS() (parseErrors []string) {
 			} else {
 				parseErrors = append(
 					parseErrors,
-					fmt.Sprintf("--cid-version=%d is unsupported ( try --cid-version=1 or --upgrade-cidv0-in-output )", ipfsOpts.CidVersion),
-				)
+					fmt.Errorf("--cid-version=%d is unsupported ( try --cid-version=1 or --upgrade-cidv0-in-output )", ipfsOpts.CidVersion))
 			}
 		} else if !optSet.IsSet("raw-leaves") {
 			ipfsOpts.UseRawLeaves = true
@@ -656,10 +651,44 @@ func (cfg *config) presetFromIPFS() (parseErrors []string) {
 		if cfg.requestedChunker == "" {
 			parseErrors = append(
 				parseErrors,
-				fmt.Sprintf("Invalid ipfs-compatible spec --chunker=%s", ipfsOpts.Chunker),
+				fmt.Errorf("Invalid ipfs-compatible spec --chunker=%s", ipfsOpts.Chunker),
 			)
 		}
 	}
 
 	return parseErrors
+}
+
+func getInitialArgs(argv []string) []string {
+	argvInitial := make([]string, len(argv)-1)
+	copy(argvInitial, argv[1:])
+	return argvInitial
+}
+
+func logArgParseErrors(argParseErrs []error, cfg *config) {
+
+	errStrings := getErrrStrings(argParseErrs)
+
+	if len(argParseErrs) != 0 {
+		fmt.Fprint(argParseErrOut, "\nFatal error parsing arguments:\n\n")
+		cfg.printUsage()
+
+		sort.Strings(errStrings)
+		fmt.Fprintf(
+			argParseErrOut,
+			"Fatal error parsing arguments:\n\t%s\n",
+			strings.Join(errStrings, "\n\t"),
+		)
+		os.Exit(2)
+	}
+}
+
+func getErrrStrings(errs []error) (errStrings []string) {
+
+	for _, err := range errs {
+		errStrings = append(errStrings, err.Error())
+	}
+
+	return
+
 }
