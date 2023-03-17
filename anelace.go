@@ -3,18 +3,8 @@ package anelace
 import (
 	"fmt"
 	"github.com/anjor/anelace/internal/block"
-	"github.com/anjor/anelace/internal/chunker"
-	"github.com/anjor/anelace/internal/chunker/buzhash"
-	"github.com/anjor/anelace/internal/chunker/fixedsize"
-	"github.com/anjor/anelace/internal/chunker/rabin"
 	"github.com/anjor/anelace/internal/collector"
-	"github.com/anjor/anelace/internal/collector/fixedcidrefsize"
-	"github.com/anjor/anelace/internal/collector/fixedoutdegree"
-	"github.com/anjor/anelace/internal/collector/noop"
-	"github.com/anjor/anelace/internal/collector/trickle"
 	"github.com/anjor/anelace/internal/constants"
-	"github.com/anjor/anelace/internal/encoder"
-	"github.com/anjor/anelace/internal/encoder/unixfsv1"
 	"github.com/anjor/anelace/internal/util/argparser"
 	"github.com/anjor/anelace/internal/util/text"
 	"github.com/pborman/getopt/v2"
@@ -25,36 +15,6 @@ import (
 
 	"github.com/ipfs/go-qringbuf"
 )
-
-var availableChunkers = map[string]anlchunker.Initializer{
-	"fixed-size": fixedsize.NewChunker,
-	"buzhash":    buzhash.NewChunker,
-	"rabin":      rabin.NewChunker,
-}
-var availableCollectors = map[string]anlcollector.Initializer{
-	"none":                noop.NewCollector,
-	"fixed-cid-refs-size": fixedcidrefsize.NewCollector,
-	"fixed-outdegree":     fixedoutdegree.NewCollector,
-	"trickle":             trickle.NewCollector,
-}
-var availableNodeEncoders = map[string]anlencoder.Initializer{
-	"unixfsv1": unixfsv1.NewEncoder,
-}
-
-type chunkerUnit struct {
-	_         constants.Incomparabe
-	instance  anlchunker.Chunker
-	constants anlchunker.InstanceConstants
-}
-
-type carUnit struct {
-	_      constants.Incomparabe
-	hdr    *anlblock.Header
-	region *qringbuf.Region
-}
-
-type seenBlocks map[[seenHashSize]byte]uniqueBlockStats
-type seenRoots map[[seenHashSize]byte]seenRoot
 
 type Anelace struct {
 	// speederization shortcut flags for internal logic

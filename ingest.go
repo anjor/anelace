@@ -27,6 +27,15 @@ const (
 	NewRootJsonl
 )
 
+type carUnit struct {
+	_      constants.Incomparabe
+	hdr    *anlblock.Header
+	region *qringbuf.Region
+}
+
+type seenBlocks map[[seenHashSize]byte]uniqueBlockStats
+type seenRoots map[[seenHashSize]byte]seenRoot
+
 type IngestionEvent struct {
 	_    constants.Incomparabe
 	Type IngestionEventType

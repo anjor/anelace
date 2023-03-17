@@ -4,9 +4,18 @@ import (
 	"encoding/base32"
 	"fmt"
 	"github.com/anjor/anelace/internal/block"
+	anlchunker "github.com/anjor/anelace/internal/chunker"
+	"github.com/anjor/anelace/internal/chunker/buzhash"
+	"github.com/anjor/anelace/internal/chunker/fixedsize"
+	"github.com/anjor/anelace/internal/chunker/rabin"
 	"github.com/anjor/anelace/internal/collector"
+	"github.com/anjor/anelace/internal/collector/fixedcidrefsize"
+	"github.com/anjor/anelace/internal/collector/fixedoutdegree"
+	"github.com/anjor/anelace/internal/collector/noop"
+	"github.com/anjor/anelace/internal/collector/trickle"
 	"github.com/anjor/anelace/internal/constants"
 	"github.com/anjor/anelace/internal/encoder"
+	"github.com/anjor/anelace/internal/encoder/unixfsv1"
 	"github.com/anjor/anelace/internal/util/stream"
 	"github.com/anjor/anelace/internal/util/text"
 	"io"
@@ -37,6 +46,27 @@ const (
 	emRootsJsonl  = "roots-jsonl"
 	emCarV1Stream = "car-v1-stream"
 )
+
+var availableChunkers = map[string]anlchunker.Initializer{
+	"fixed-size": fixedsize.NewChunker,
+	"buzhash":    buzhash.NewChunker,
+	"rabin":      rabin.NewChunker,
+}
+var availableCollectors = map[string]anlcollector.Initializer{
+	"none":                noop.NewCollector,
+	"fixed-cid-refs-size": fixedcidrefsize.NewCollector,
+	"fixed-outdegree":     fixedoutdegree.NewCollector,
+	"trickle":             trickle.NewCollector,
+}
+var availableNodeEncoders = map[string]anlencoder.Initializer{
+	"unixfsv1": unixfsv1.NewEncoder,
+}
+
+type chunkerUnit struct {
+	_         constants.Incomparabe
+	instance  anlchunker.Chunker
+	constants anlchunker.InstanceConstants
+}
 
 // where the CLI initial error messages go
 var argParseErrOut = os.Stderr
