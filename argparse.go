@@ -242,9 +242,9 @@ func (anl *Anelace) setupCarWriting() (argErrs []error) {
 		argErrs = append(argErrs, fmt.Errorf("disabling blockstat collection conflicts with streaming .car data"))
 	}
 
-	if stream.IsTTY(anl.cfg.emitters[emCarV1Stream]) {
-		argErrs = append(argErrs, fmt.Errorf("output of .car streams to a TTY is not supported"))
-	}
+	//if stream.IsTTY(anl.cfg.emitters[emCarV1Stream]) {
+	//	argErrs = append(argErrs, fmt.Errorf("output of .car streams to a TTY is not supported"))
+	//}
 
 	if len(argErrs) > 0 {
 		return
