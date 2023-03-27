@@ -91,8 +91,6 @@ func NewAnelace() *Anelace {
 		stdoutWriter: os.Stdout,
 	}
 
-	fmt.Printf("Anelace: %s\n", anl)
-
 	cfg.initArgvParser()
 	argParseErrs := argparser.Parse([]string{}, cfg.optSet)
 
