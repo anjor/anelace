@@ -113,6 +113,8 @@ func NewAnelace() *Anelace {
 func NewAnelaceWithWriters(stderr io.Writer, stdout io.Writer) (*Anelace, []error) {
 
 	cfg := defaultConfig()
+	cfg.emittersStdOut = []string{emCarV1Stream}
+	cfg.emittersStdErr = []string{emRootsJsonl}
 
 	anl := &Anelace{
 		cfg:          cfg,
@@ -245,4 +247,12 @@ func (anl *Anelace) Destroy() {
 	}
 	anl.qrb = nil
 	anl.mu.Unlock()
+}
+
+func (anl *Anelace) SetCarWriter(w io.Writer) {
+	anl.carDataWriter = w
+}
+
+func (anl *Anelace) SetMultipart(m bool) {
+	anl.cfg.MultipartStream = m
 }
