@@ -17,7 +17,8 @@ func main() {
 
 	// Parse CLI and initialize everything
 	// On error it will log.Fatal() on its own
-	anl := anelace.NewAnelaceFromArgv(os.Args)
+	//anl := anelace.NewAnelaceFromArgv(os.Args)
+	anl, _ := anelace.NewAnelaceWithWriters(os.Stderr, os.Stdout)
 
 	if stream.IsTTY(os.Stdin) {
 		fmt.Fprint(

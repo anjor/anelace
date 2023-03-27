@@ -191,7 +191,7 @@ func (anl *Anelace) setupEmitters() (argErrs []error) {
 		} else if val != nil {
 			argErrs = append(argErrs, fmt.Errorf("Emitter '%s' specified more than once", s))
 		} else {
-			anl.cfg.emitters[s] = os.Stderr
+			anl.cfg.emitters[s] = anl.stderrWriter
 		}
 	}
 	activeStdout := make(map[string]bool, len(anl.cfg.emittersStdOut))
@@ -207,7 +207,7 @@ func (anl *Anelace) setupEmitters() (argErrs []error) {
 		} else if val != nil {
 			argErrs = append(argErrs, fmt.Errorf("Emitter '%s' specified more than once", s))
 		} else {
-			anl.cfg.emitters[s] = os.Stdout
+			anl.cfg.emitters[s] = anl.stdoutWriter
 		}
 	}
 
@@ -449,12 +449,12 @@ func (anl *Anelace) setupChunker() (argErrs []error) {
 
 func (anl *Anelace) setupCollector(nodeEnc anlencoder.NodeEncoder) (argErrs []error) {
 
-	if anl.cfg.optSet.IsSet("collector") && anl.cfg.requestedCollector == "" {
-		return []error{
-			fmt.Errorf("When specified, collector arg must be in the form '--collector=algname_opt1_opt2...'. Available collector names are: " +
-				text.AvailableMapKeys(availableCollectors)),
-		}
-	}
+	//if anl.cfg.optSet.IsSet("collector") && anl.cfg.requestedCollector == "" {
+	//	return []error{
+	//		fmt.Errorf("When specified, collector arg must be in the form '--collector=algname_opt1_opt2...'. Available collector names are: " +
+	//			text.AvailableMapKeys(availableCollectors)),
+	//	}
+	//}
 
 	collectorArgs := strings.Split(anl.cfg.requestedCollector, "_")
 	init, exists := availableCollectors[collectorArgs[0]]
