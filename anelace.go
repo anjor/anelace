@@ -113,6 +113,7 @@ func NewAnelace() *Anelace {
 func NewAnelaceWithWriters(stderr io.Writer, stdout io.Writer) (*Anelace, []error) {
 
 	cfg := defaultConfig()
+	// todo: anjor, remove this hardcoding
 	cfg.emittersStdOut = []string{emCarV1Stream}
 	cfg.emittersStdErr = []string{emRootsJsonl}
 
