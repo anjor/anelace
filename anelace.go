@@ -76,13 +76,69 @@ type Anelace struct {
 	carDataQueue     chan carUnit
 	carWriteError    chan error
 	carDataWriter    io.Writer
+	stderrWriter     io.Writer
+	stdoutWriter     io.Writer
 }
 
 func NewAnelace() *Anelace {
-	return &Anelace{
-		cfg:         defaultConfig(),
-		statSummary: setStatSummary(),
+
+	cfg := defaultConfig()
+
+	anl := &Anelace{
+		cfg:          cfg,
+		statSummary:  setStatSummary(),
+		stderrWriter: os.Stderr,
+		stdoutWriter: os.Stdout,
 	}
+
+	cfg.initArgvParser()
+	argParseErrs := argparser.Parse([]string{}, cfg.optSet)
+
+	nodeEnc, errorMessages := anl.setupEncoding()
+	argParseErrs = append(argParseErrs, errorMessages...)
+	argParseErrs = append(argParseErrs, anl.setupChunker()...)
+	argParseErrs = append(argParseErrs, anl.setupCollector(nodeEnc)...)
+	argParseErrs = append(argParseErrs, anl.setupEmitters()...)
+
+	// Opts check out - set up the car emitter
+	if len(argParseErrs) == 0 && anl.cfg.emitters[emCarV1Stream] != nil {
+		argParseErrs = append(argParseErrs, anl.setupCarWriting()...)
+	}
+
+	logArgParseErrors(argParseErrs, &cfg)
+
+	return anl
+}
+
+func NewAnelaceWithWriters(stderr io.Writer, stdout io.Writer) (*Anelace, []error) {
+
+	cfg := defaultConfig()
+	// todo: anjor, remove this hardcoding
+	cfg.emittersStdOut = []string{emCarV1Stream}
+	cfg.emittersStdErr = []string{emRootsJsonl}
+
+	anl := &Anelace{
+		cfg:          cfg,
+		statSummary:  setStatSummary(),
+		stderrWriter: stderr,
+		stdoutWriter: stdout,
+	}
+
+	cfg.initArgvParser()
+	argParseErrs := argparser.Parse([]string{}, cfg.optSet)
+
+	nodeEnc, errorMessages := anl.setupEncoding()
+	argParseErrs = append(argParseErrs, errorMessages...)
+	argParseErrs = append(argParseErrs, anl.setupChunker()...)
+	argParseErrs = append(argParseErrs, anl.setupCollector(nodeEnc)...)
+	argParseErrs = append(argParseErrs, anl.setupEmitters()...)
+
+	// Opts check out - set up the car emitter
+	if len(argParseErrs) == 0 && anl.cfg.emitters[emCarV1Stream] != nil {
+		argParseErrs = append(argParseErrs, anl.setupCarWriting()...)
+	}
+
+	return anl, argParseErrs
 }
 
 func NewAnelaceFromArgv(argv []string) (anl *Anelace) {
@@ -196,4 +252,8 @@ func (anl *Anelace) Destroy() {
 
 func (anl *Anelace) SetCarWriter(w io.Writer) {
 	anl.carDataWriter = w
+}
+
+func (anl *Anelace) SetMultipart(m bool) {
+	anl.cfg.MultipartStream = m
 }
