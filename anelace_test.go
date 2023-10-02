@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
-	"log"
 	"os"
 	"testing"
 )
@@ -29,14 +27,13 @@ func TestDeterministicCarContent(t *testing.T) {
 			anl, errs := NewAnelaceWithWriters(mockStderr, mockStdout)
 			if len(errs) > 0 {
 				for _, err := range errs {
-					fmt.Println(err)
 					t.Error(err)
 				}
 			}
 
 			mockOsStdin, err := os.Open(tt.testContent)
 			if err != nil {
-				fmt.Printf("Error: %s", err)
+				t.Errorf("Error: %s", err)
 			}
 
 			// process the mock stdin input
@@ -46,7 +43,7 @@ func TestDeterministicCarContent(t *testing.T) {
 			)
 			anl.Destroy()
 			if processErr != nil {
-				log.Fatalf("Unexpected error processing STDIN: %s", processErr)
+				t.Errorf("Unexpected error processing STDIN: %s", processErr)
 			}
 
 			// check to see if the sums match
