@@ -1,4 +1,4 @@
-package main
+package anelace
 
 import (
 	"bytes"
@@ -8,8 +8,6 @@ import (
 	"log"
 	"os"
 	"testing"
-
-	"github.com/anjor/anelace"
 )
 
 func TestDeterministicCarContent(t *testing.T) {
@@ -19,7 +17,7 @@ func TestDeterministicCarContent(t *testing.T) {
 	var first [32]byte
 	for iter := 0; iter < TEST_ITERATIONS; iter++ {
 		mockStderr, mockStdout := new(bytes.Buffer), new(bytes.Buffer)
-		anl, errs := anelace.NewAnelaceWithWriters(mockStderr, mockStdout)
+		anl, errs := NewAnelaceWithWriters(mockStderr, mockStdout)
 		if len(errs) > 0 {
 			for _, err := range errs {
 				fmt.Println(err)
@@ -27,9 +25,7 @@ func TestDeterministicCarContent(t *testing.T) {
 			}
 		}
 
-		var err error
-		//mockOsStdin, err := os.CreateTemp("", "*")
-		mockOsStdin, err := os.Open("/Users/jay/Documents/code/anelace/bin/sample.txt")
+		mockOsStdin, err := os.Open("test/sample-payload.dat")
 		if err != nil {
 			fmt.Printf("Error: %s", err)
 		}
