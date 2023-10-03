@@ -14,7 +14,7 @@ func TestDeterministicCarContent(t *testing.T) {
 		testContent string
 	}{
 		{
-			testContent: "maint/deterministic/random-1k-payload.dat",
+			testContent: "maint/testdata/deterministic/random-1K-payload.dat",
 		},
 	}
 
